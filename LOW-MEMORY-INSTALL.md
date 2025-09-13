@@ -23,6 +23,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/ins
 If the standard installer fails, try these manual steps:
 
 1. **Create Swap Space First:**
+
 ```bash
 # Create 1GB swap file
 sudo dd if=/dev/zero of=/swapfile bs=1M count=1024
@@ -35,6 +36,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
 2. **Run Installation:**
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-kpanel.sh)
 ```
@@ -62,12 +64,14 @@ sudo docker-compose -f docker-compose.production.yml up -d
 If all else fails, install manually:
 
 1. **Install Node.js and dependencies:**
+
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs git nginx sqlite3
 ```
 
 2. **Download and setup KPanel:**
+
 ```bash
 sudo useradd -r -s /bin/false kpanel
 sudo mkdir -p /usr/local/kpanel
@@ -78,18 +82,21 @@ sudo chown -R kpanel:kpanel /usr/local/kpanel
 ```
 
 3. **Install server dependencies only:**
+
 ```bash
 cd /usr/local/kpanel
 sudo -u kpanel npm install --production --omit=dev
 ```
 
 4. **Download pre-built client (if available):**
+
 ```bash
 cd /usr/local/kpanel
 curl -fsSL https://github.com/herfaaljihad/kpanel/releases/latest/download/client-dist.tar.gz | sudo -u kpanel tar -xz -C client/
 ```
 
 5. **Configure and start service:**
+
 ```bash
 # Generate secrets
 JWT_SECRET=$(openssl rand -hex 32)
@@ -163,6 +170,7 @@ If the build process appears to hang:
 ### Service Won't Start
 
 Check system resources:
+
 ```bash
 # Check memory usage
 free -h

@@ -193,7 +193,7 @@ install_kpanel() {
     cd "$KPANEL_DIR"
     sudo -u "$KPANEL_USER" npm install --production
     
-    # Build client with retry mechanism
+    # Build client with retry mechanism and memory cleanup
     build_client() {
         local max_attempts=3
         local attempt=1
@@ -201,6 +201,14 @@ install_kpanel() {
         
         while [ $attempt -le $max_attempts ]; do
             print_status "Build attempt $attempt of $max_attempts..."
+            
+            # Clear Node.js cache and temporary files before each attempt
+            sudo -u "$KPANEL_USER" bash -c "rm -rf $KPANEL_DIR/client/node_modules/.cache 2>/dev/null || true"
+            sudo -u "$KPANEL_USER" bash -c "rm -rf $KPANEL_DIR/client/dist 2>/dev/null || true"
+            sudo -u "$KPANEL_USER" bash -c "npm cache clean --force 2>/dev/null || true"
+            
+            # Run garbage collection if possible
+            sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
             
             if sudo -u "$KPANEL_USER" bash -c "$build_cmd"; then
                 print_status "Client build successful!"
@@ -226,7 +234,7 @@ install_kpanel() {
                 fi
                 
                 attempt=$((attempt + 1))
-                sleep 5
+                sleep 10  # Increased sleep time to allow memory cleanup
             fi
         done
         
@@ -248,8 +256,15 @@ install_kpanel() {
         # Try to download pre-built client if available, otherwise use minimal build
         if curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.tar.gz -o /tmp/client-dist.tar.gz 2>/dev/null; then
             print_status "Downloading pre-built client..."
-            tar -xzf /tmp/client-dist.tar.gz -C "$KPANEL_DIR/client/"
-            rm -f /tmp/client-dist.tar.gz
+            mkdir -p "$KPANEL_DIR/client/dist"
+            cd "$KPANEL_DIR/client"
+            if tar -xzf /tmp/client-dist.tar.gz 2>/dev/null || unzip -q /tmp/client-dist.tar.gz -d . 2>/dev/null; then
+                rm -f /tmp/client-dist.tar.gz
+                print_status "Pre-built client extracted successfully!"
+            else
+                print_warning "Failed to extract pre-built client, falling back to build..."
+                rm -f /tmp/client-dist.tar.gz
+            fi
         else
             print_status "Pre-built client not available, attempting minimal build..."
             # Create temporary swap and try minimal build
@@ -258,7 +273,7 @@ install_kpanel() {
             mkswap /tmp/kpanel-swap 2>/dev/null || true
             swapon /tmp/kpanel-swap 2>/dev/null || true
             
-            if ! build_client "NODE_OPTIONS='--max-old-space-size=256 --optimize-for-size' npm run build"; then
+            if ! build_client "NODE_OPTIONS='--max-old-space-size=256' npm run build"; then
                 print_error "Build failed due to insufficient memory. Please use a server with at least 1GB RAM or manually upload pre-built client files."
                 exit 1
             fi
@@ -281,7 +296,7 @@ install_kpanel() {
         fi
         
         # Use conservative memory settings with retry
-        if ! build_client "NODE_OPTIONS='--max-old-space-size=512 --optimize-for-size' npm run build"; then
+        if ! build_client "NODE_OPTIONS='--max-old-space-size=512' npm run build"; then
             print_error "Build failed even with memory optimizations. Consider using Docker installation or upgrading server memory."
             exit 1
         fi

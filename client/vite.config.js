@@ -26,7 +26,12 @@ export default defineConfig({
         experimentalMinChunkSize: 1000, // Minimize chunk fragmentation
         manualChunks: {
           vendor: ["react", "react-dom"],
-          mui: ["@mui/material", "@mui/system", "@emotion/react", "@emotion/styled"],
+          mui: [
+            "@mui/material",
+            "@mui/system",
+            "@emotion/react",
+            "@emotion/styled",
+          ],
           icons: ["@mui/icons-material"],
           router: ["react-router-dom"],
           charts: ["recharts"],
@@ -50,7 +55,14 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   optimizeDeps: {
-    include: ["react", "react-dom", "@mui/material", "@mui/system", "@emotion/react", "@emotion/styled"],
+    include: [
+      "react",
+      "react-dom",
+      "@mui/material",
+      "@mui/system",
+      "@emotion/react",
+      "@emotion/styled",
+    ],
   },
   base: "/",
 });
