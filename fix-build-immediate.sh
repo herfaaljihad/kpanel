@@ -168,6 +168,9 @@ echo -e "${GREEN}✅ Build cache cleaned${NC}"
 echo -e "${YELLOW}📥 Step 5: Installing dependencies...${NC}"
 npm install
 
+echo -e "${YELLOW}🔧 Installing terser for build optimization...${NC}"
+npm install --save-dev terser
+
 echo -e "${YELLOW}🏗️  Step 6: Building frontend with memory optimization...${NC}"
 
 # Get available memory

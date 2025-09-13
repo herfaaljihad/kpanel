@@ -1,7 +1,5 @@
 # KPanel - Modern Hosting Control Panel# 🎛️ KPanel - Modern Hosting Control Panel
 
-
-
 <div align="center">[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/herfaaljihad/kpanel)
 
 [![Node.js](https://img.shields.io/badge/Node.js-16+-green.svg)](https://nodejs.org/)
@@ -12,7 +10,7 @@
 
 **Modern, lightweight hosting control panel optimized for low-resource VPS**
 
-> **Production-ready hosting control panel optimized for VPS 1GB RAM**  
+> **Production-ready hosting control panel optimized for VPS 1GB RAM**
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/herfaaljihad/kpanel)> Modern alternative to DirectAdmin/cPanel with superior performance and zero licensing costs.
 
@@ -20,11 +18,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)---
 
-
-
 </div>## 🚀 **Quick Start**
-
-
 
 ## 🚀 Features```bash
 
@@ -46,8 +40,6 @@
 
 - **📦 Easy Installation** - One-command setup scriptnpm run setup
 
-
-
 ## 🖥️ System Requirements# Start development server
 
 npm run dev
@@ -64,11 +56,9 @@ npm run dev
 
 - **Node.js**: 16.0.0+---
 
-
-
 ### Recommended## ✨ **Features**
 
-- **RAM**: 2GB+ 
+- **RAM**: 2GB+
 
 - **CPU**: 2+ vCPU### 🎯 **Core Features**
 
@@ -84,7 +74,7 @@ npm run dev
 
 - ✅ **Database Management** - MySQL/MariaDB + SQLite
 
-```bash- ✅ **File Manager** - Web-based file operations
+````bash- ✅ **File Manager** - Web-based file operations
 
 # Download and run installer- ✅ **System Monitoring** - Real-time resource tracking
 
@@ -168,7 +158,7 @@ docker-compose up -d- **Storage:** 10GB available space
 
 http://your-server-ip:3002- **Database:** MySQL 8.0+ / MariaDB 10.5+ / SQLite 3.35+
 
-```
+````
 
 ### **Automated Installation**
 
@@ -186,8 +176,6 @@ curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install.sh
 
 ## 📖 Usage Guide```
 
-
-
 ### Dashboard Overview#### **📋 Manual Production Installation**
 
 - **System Stats**: CPU, RAM, disk usage in real-time
@@ -200,8 +188,6 @@ curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install.sh
 
 - **Log Viewer**: View system and application logscd kpanel
 
-
-
 ### System Management# Install dependencies
 
 - **Updates**: Install system updates and security patchesnpm install
@@ -211,8 +197,6 @@ curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install.sh
 - **Users**: Manage system users and permissions# Setup database and admin user
 
 - **Network**: Configure firewall and network settingsnpm run setup
-
-
 
 ### Application Management# Start in production mode
 
@@ -224,11 +208,7 @@ curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install.sh
 
 - **Domains**: Configure virtual hosts and domains#### **🔧 If Frontend Build Fails**
 
-
-
 ## 🛠️ TroubleshootingIf you see only a minimal loading page, the frontend build may have failed. Run:
-
-
 
 ### Build Issues on Low Memory VPS```bash
 
@@ -236,9 +216,7 @@ curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install.sh
 
 If installation hangs during frontend build:cd /path/to/kpanel
 
-
-
-```bash# Run the fix script
+````bash# Run the fix script
 
 # Run the build fix scriptchmod +x fix-ubuntu-vps.sh
 
@@ -246,13 +224,13 @@ chmod +x fix-build-immediate.shsudo ./fix-ubuntu-vps.sh
 
 ./fix-build-immediate.sh```
 
-```
+````
 
 Or manually build the frontend:
 
 ### Common Issues
 
-```bash
+````bash
 
 **Frontend build fails**cd client
 
@@ -268,21 +246,21 @@ sudo mkswap /swapfilepm2 restart kpanel-server
 
 sudo swapon /swapfile```
 
-```
+````
 
 #### **🔧 Quick Fix Commands**
 
 **Permission denied errors**
 
-```bash```bash
+`bash`bash
 
 # Fix file permissions# Check PM2 status
 
 sudo chown -R $USER:$USER /path/to/kpanelpm2 status
 
-chmod +x *.sh
+chmod +x \*.sh
 
-```# Restart server
+````# Restart server
 
 pm2 restart kpanel-server
 
@@ -360,13 +338,13 @@ pm2 start production-server.js -i max --name kpanel-cluster# Edit configuration
 
 ```nano .env
 
-```
+````
 
 ## 🔄 Updates
 
 ### **Key Configuration Options**
 
-```bash
+````bash
 
 # Pull latest changes```env
 
@@ -384,7 +362,7 @@ cd client && npm run build && cd ..
 
 pm2 restart kpanel-serverENABLE_TWO_FACTOR=true
 
-```
+````
 
 # Web Server
 
@@ -396,7 +374,7 @@ MAX_DOMAINS_PER_USER=50
 
 # SSL
 
-```bashENABLE_SSL_AUTO_RENEW=true
+````bashENABLE_SSL_AUTO_RENEW=true
 
 # Clone repositorySSL_CERT_PATH=/etc/ssl/certs
 
@@ -418,7 +396,7 @@ npm run dev  # Backend on :5000
 
 cd client && npm run dev  # Frontend on :3000---
 
-```
+````
 
 ## 📚 **API Documentation**
 
@@ -426,7 +404,7 @@ cd client && npm run dev  # Frontend on :3000---
 
 ### **Authentication**
 
-```
+````
 
 kpanel/```bash
 
@@ -444,7 +422,7 @@ kpanel/```bash
 
 └── install.sh### **Domain Management**
 
-```
+````
 
 ```bash
 
@@ -508,15 +486,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">curl -X GET http://localhost:3001/api/system/metrics \
 
-  -H "Authorization: Bearer YOUR_TOKEN"
+-H "Authorization: Bearer YOUR_TOKEN"
 
 **Made with ❤️ for the hosting community**```
 
-
-
 [Website](https://kpanel.dev) • [Demo](https://demo.kpanel.dev) • [Docs](https://docs.kpanel.dev)---
-
-
 
 </div>## 🔧 **Usage Examples**
 

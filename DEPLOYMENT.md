@@ -32,6 +32,7 @@ chmod +x fix-build-immediate.sh
 ## Akses Panel
 
 Setelah instalasi selesai:
+
 - **URL**: `http://IP_VPS:3002`
 - **Health Check**: `http://IP_VPS:3002/api/health`
 
@@ -54,19 +55,22 @@ pm2 stop kpanel-server
 ## Spek VPS Yang Direkomendasikan
 
 ### Minimum (Yang Anda Gunakan)
+
 - ✅ **RAM**: 1GB (dengan swap)
 - ✅ **CPU**: 2 vCPU
 - ✅ **Disk**: 30GB ESSD
 - ✅ **OS**: Ubuntu 24.04
 
 ### Optimal
+
 - **RAM**: 2GB+
-- **CPU**: 2+ vCPU  
+- **CPU**: 2+ vCPU
 - **Disk**: 50GB+
 
 ## Optimasi untuk VPS 1GB
 
 Script installer sudah include:
+
 - ✅ Automatic swap creation (1GB)
 - ✅ Memory-optimized build
 - ✅ Frontend chunking
@@ -76,12 +80,14 @@ Script installer sudah include:
 ## Troubleshooting
 
 ### Build Hang
+
 ```bash
 # Jalankan fix script
 ./fix-build-immediate.sh
 ```
 
 ### Memory Issues
+
 ```bash
 # Check memory
 free -h
@@ -90,6 +96,7 @@ swapon --show
 ```
 
 ### Port Issues
+
 ```bash
 # Check port 3002
 sudo netstat -tulpn | grep :3002
