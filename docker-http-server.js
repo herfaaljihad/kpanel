@@ -68,14 +68,31 @@ const db = new sqlite3.Database(DB_PATH, (err) => {
 
 // Initialize database tables
 db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    email TEXT,
-    role TEXT DEFAULT 'user',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  // Check if users table exists with correct schema
+  db.get("PRAGMA table_info(users)", (err, info) => {
+    if (err || !info) {
+      // Create new users table
+      db.run(`CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        email TEXT,
+        role TEXT DEFAULT 'user',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+    } else {
+      // Check if username column exists
+      db.all("PRAGMA table_info(users)", (err, columns) => {
+        const hasUsername = columns && columns.some(col => col.name === 'username');
+        if (!hasUsername) {
+          // Migrate old table structure
+          console.log("🔧 Migrating database schema...");
+          db.run("ALTER TABLE users ADD COLUMN username TEXT UNIQUE");
+          db.run("UPDATE users SET username = 'admin' WHERE id = 1");
+        }
+      });
+    }
+  });
 
   db.run(`CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
@@ -84,17 +101,29 @@ db.serialize(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  // Create admin user if not exists
-  const adminPassword = process.env.ADMIN_PASSWORD || "kpanel123";
-  db.get("SELECT * FROM users WHERE username = 'admin'", (err, row) => {
-    if (!row) {
-      db.run(
-        "INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')",
-        ["admin", adminPassword]
-      );
-      console.log("👤 Admin user created");
-    }
-  });
+  // Create admin user if not exists (with retry logic)
+  setTimeout(() => {
+    const adminPassword = process.env.ADMIN_PASSWORD || "kpanel123";
+    
+    db.get("SELECT * FROM users WHERE username = 'admin' OR id = 1", (err, row) => {
+      if (err) {
+        console.log("⚠️ Database query error:", err.message);
+        return;
+      }
+      
+      if (!row) {
+        db.run(
+          "INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')",
+          ["admin", adminPassword],
+          (err) => {
+            if (!err) console.log("👤 Admin user created");
+          }
+        );
+      } else {
+        console.log("👤 Admin user exists");
+      }
+    });
+  }, 1000); // Wait for potential schema migration
 });
 
 // CORS Origins - HTTP ONLY
