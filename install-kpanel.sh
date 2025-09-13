@@ -302,11 +302,13 @@ install_kpanel() {
                 print_error "Your server has very low memory (${MEMORY_MB}MB)."
                 print_error ""
                 print_error "Recommended solutions (in order of preference):"
-                print_error "1. Use Docker installation (recommended):"
+                print_error "1. Use Docker installation (recommended for low memory):"
+                print_error "   bash <(curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/docker-install.sh)"
+                print_error "2. Use the quick Docker installer:"
                 print_error "   bash <(curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/quick-install.sh)"
-                print_error "2. Upgrade to a server with at least 1GB RAM"
-                print_error "3. Use a VPS from DigitalOcean, Vultr, or Linode (\$5-6/month)"
-                print_error "4. See LOW-MEMORY-INSTALL.md for manual installation"
+                print_error "3. Upgrade to a server with at least 1GB RAM"
+                print_error "4. Use a VPS from DigitalOcean, Vultr, or Linode (\$5-6/month)"
+                print_error "5. See LOW-MEMORY-INSTALL.md for manual installation"
                 exit 1
             fi
             
