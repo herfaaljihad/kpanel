@@ -199,6 +199,31 @@ EOF
     SESSION_SECRET=$(openssl rand -hex 32)
     ADMIN_PASSWORD=$(openssl rand -base64 12)
     
+    # Detect public IP
+    print_status "Detecting public IP address..."
+    PUBLIC_IP=""
+    
+    # Try multiple IP detection services
+    for service in "https://api.ipify.org" "https://checkip.amazonaws.com" "https://icanhazip.com"; do
+        PUBLIC_IP=$(curl -s --max-time 10 "$service" | tr -d '\n\r' | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+        if [ -n "$PUBLIC_IP" ]; then
+            echo -e "${GREEN}[INFO]${NC} Detected public IP: $PUBLIC_IP"
+            break
+        fi
+    done
+    
+    # Fallback to local network IP
+    if [ -z "$PUBLIC_IP" ]; then
+        print_warning "Could not detect public IP, trying local network IP..."
+        PUBLIC_IP=$(ip route get 8.8.8.8 | awk '{print $7; exit}' 2>/dev/null || hostname -I | awk '{print $1}')
+    fi
+    
+    # Final fallback
+    if [ -z "$PUBLIC_IP" ]; then
+        PUBLIC_IP="localhost"
+        print_warning "Using localhost as fallback. You may need to access via server's actual IP"
+    fi
+    
     cat > .env << EOF
 # KPanel Configuration
 NODE_ENV=production
@@ -208,6 +233,7 @@ SESSION_SECRET=$SESSION_SECRET
 DATABASE_PATH=/app/database/kpanel.db
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=$ADMIN_PASSWORD
+PUBLIC_IP=$PUBLIC_IP
 
 # Docker Configuration
 COMPOSE_PROJECT_NAME=kpanel
@@ -269,17 +295,22 @@ show_completion() {
     echo -e "${GREEN}✓${NC} KPanel is running with Docker"
     echo -e "${GREEN}✓${NC} Memory-efficient installation"
     echo -e "${GREEN}✓${NC} Automatic service management"
+    echo -e "${GREEN}✓${NC} HTTP-only mode (no SSL required)"
     echo ""
     echo -e "${BLUE}Access Information:${NC}"
-    echo "URL: http://$(curl -s ifconfig.me 2>/dev/null || echo 'your-server-ip'):$KPANEL_PORT"
-    echo "Username: admin"
-    echo "Password: $(grep ADMIN_PASSWORD /opt/kpanel/.env | cut -d'=' -f2)"
+    echo "🌐 URL: http://${PUBLIC_IP:-$(curl -s ifconfig.me 2>/dev/null || echo 'your-server-ip')}:$KPANEL_PORT"
+    echo "👤 Username: admin"
+    echo "🔑 Password: $(grep ADMIN_PASSWORD .env | cut -d'=' -f2)"
+    echo ""
+    echo -e "${BLUE}Alternative Access:${NC}"
+    echo "📱 Local: http://localhost:$KPANEL_PORT"
+    echo "🔗 Health: http://${PUBLIC_IP:-$(curl -s ifconfig.me 2>/dev/null || echo 'your-server-ip')}:$KPANEL_PORT/api/health"
     echo ""
     echo -e "${BLUE}Service Management:${NC}"
-    echo "Start:   cd /opt/kpanel && docker-compose up -d"
-    echo "Stop:    cd /opt/kpanel && docker-compose down"
-    echo "Logs:    cd /opt/kpanel && docker-compose logs -f"
-    echo "Update:  cd /opt/kpanel && docker-compose pull && docker-compose up -d"
+    echo "▶️  Start:   docker-compose up -d"
+    echo "⏹️  Stop:    docker-compose down"
+    echo "📋 Logs:    docker-compose logs -f"
+    echo "🔄 Update:  docker-compose pull && docker-compose up -d"
     echo ""
     echo -e "${YELLOW}Note:${NC} Configuration saved in /opt/kpanel/.env"
     echo -e "${YELLOW}Note:${NC} This Docker installation uses minimal memory"

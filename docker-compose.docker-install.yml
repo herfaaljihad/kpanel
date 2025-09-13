@@ -25,6 +25,7 @@ services:
       - DISABLE_HTTPS=true
       - NO_SSL=true
       - HTTP_ONLY=true
+      - PUBLIC_IP=${PUBLIC_IP:-}
     healthcheck:
       test:
         [

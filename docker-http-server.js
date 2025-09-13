@@ -28,25 +28,54 @@ console.log("🔌 Port:", CONFIG.port);
 console.log("🔓 Protocol: HTTP ONLY");
 
 // Get public IP
-let PUBLIC_IP = "localhost";
+let PUBLIC_IP = process.env.PUBLIC_IP || "localhost";
 let LOCAL_IP = "127.0.0.1";
 
-try {
-  const https = require("https");
-  https
-    .get("https://api.ipify.org", (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        PUBLIC_IP = data.trim();
-        console.log("✅ Detected public IP:", PUBLIC_IP);
+// Function to detect public IP
+function detectPublicIP() {
+  return new Promise((resolve) => {
+    // First try environment variable
+    if (process.env.PUBLIC_IP) {
+      console.log("✅ Using PUBLIC_IP from environment:", process.env.PUBLIC_IP);
+      resolve(process.env.PUBLIC_IP);
+      return;
+    }
+
+    console.log("🔍 Detecting public IP address...");
+    
+    try {
+      const https = require("https");
+      const request = https.get("https://api.ipify.org", { timeout: 5000 }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          const detectedIP = data.trim();
+          if (detectedIP && detectedIP !== "localhost") {
+            console.log("✅ Detected public IP:", detectedIP);
+            resolve(detectedIP);
+          } else {
+            console.log("⚠️ Invalid IP detected, using localhost");
+            resolve("localhost");
+          }
+        });
       });
-    })
-    .on("error", (err) => {
-      console.log("⚠️ Could not detect public IP, using localhost");
-    });
-} catch (error) {
-  console.log("⚠️ IP detection failed, using localhost");
+      
+      request.on("error", () => {
+        console.log("⚠️ Could not detect public IP, using localhost");
+        resolve("localhost");
+      });
+      
+      request.on("timeout", () => {
+        request.destroy();
+        console.log("⚠️ IP detection timeout, using localhost");
+        resolve("localhost");
+      });
+      
+    } catch (error) {
+      console.log("⚠️ IP detection failed, using localhost");
+      resolve("localhost");
+    }
+  });
 }
 
 // Database setup
@@ -83,7 +112,8 @@ db.serialize(() => {
     } else {
       // Check if username column exists
       db.all("PRAGMA table_info(users)", (err, columns) => {
-        const hasUsername = columns && columns.some(col => col.name === 'username');
+        const hasUsername =
+          columns && columns.some((col) => col.name === "username");
         if (!hasUsername) {
           // Migrate old table structure
           console.log("🔧 Migrating database schema...");
@@ -104,25 +134,28 @@ db.serialize(() => {
   // Create admin user if not exists (with retry logic)
   setTimeout(() => {
     const adminPassword = process.env.ADMIN_PASSWORD || "kpanel123";
-    
-    db.get("SELECT * FROM users WHERE username = 'admin' OR id = 1", (err, row) => {
-      if (err) {
-        console.log("⚠️ Database query error:", err.message);
-        return;
+
+    db.get(
+      "SELECT * FROM users WHERE username = 'admin' OR id = 1",
+      (err, row) => {
+        if (err) {
+          console.log("⚠️ Database query error:", err.message);
+          return;
+        }
+
+        if (!row) {
+          db.run(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')",
+            ["admin", adminPassword],
+            (err) => {
+              if (!err) console.log("👤 Admin user created");
+            }
+          );
+        } else {
+          console.log("👤 Admin user exists");
+        }
       }
-      
-      if (!row) {
-        db.run(
-          "INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')",
-          ["admin", adminPassword],
-          (err) => {
-            if (!err) console.log("👤 Admin user created");
-          }
-        );
-      } else {
-        console.log("👤 Admin user exists");
-      }
-    });
+    );
   }, 1000); // Wait for potential schema migration
 });
 
@@ -317,34 +350,43 @@ app.get("*", (req, res) => {
   }
 });
 
-// Start server - HTTP ONLY
-const server = app.listen(CONFIG.port, CONFIG.host, () => {
-  console.log("\n🎉 KPanel Docker Server Started Successfully!");
-  console.log("\n📊 Server Information:");
-  console.log(`   🌐 Public URL: http://${PUBLIC_IP}:${CONFIG.port}`);
-  console.log(`   🏠 Local URL: http://localhost:${CONFIG.port}`);
-  console.log(`   📡 API Base: http://${PUBLIC_IP}:${CONFIG.port}/api`);
-  console.log(`   🗄️  Database: SQLite (Connected)`);
-  console.log(`   ⚙️  Environment: production (Docker)`);
-  console.log("\n🔗 Quick Links:");
-  console.log(
-    `   💚 Health Check: http://${PUBLIC_IP}:${CONFIG.port}/api/health`
-  );
-  console.log(
-    `   📊 Server Info: http://${PUBLIC_IP}:${CONFIG.port}/api/server/info`
-  );
-  console.log("\n✅ Ready for production use!");
-});
-
-// Graceful shutdown
-process.on("SIGINT", () => {
-  console.log("\n🔄 Received SIGINT, shutting down gracefully");
-  server.close(() => {
-    db.close();
-    console.log("✅ Server closed");
-    process.exit(0);
+// Start server - HTTP ONLY (after IP detection)
+async function startServer() {
+  // Detect public IP first
+  PUBLIC_IP = await detectPublicIP();
+  
+  const server = app.listen(CONFIG.port, CONFIG.host, () => {
+    console.log("\n🎉 KPanel Docker Server Started Successfully!");
+    console.log("\n📊 Server Information:");
+    console.log(`   🌐 Public URL: http://${PUBLIC_IP}:${CONFIG.port}`);
+    console.log(`   🏠 Local URL: http://localhost:${CONFIG.port}`);
+    console.log(`   📡 API Base: http://${PUBLIC_IP}:${CONFIG.port}/api`);
+    console.log(`   🗄️  Database: SQLite (Connected)`);
+    console.log(`   ⚙️  Environment: production (Docker)`);
+    console.log("\n🔗 Quick Links:");
+    console.log(
+      `   💚 Health Check: http://${PUBLIC_IP}:${CONFIG.port}/api/health`
+    );
+    console.log(
+      `   📊 Server Info: http://${PUBLIC_IP}:${CONFIG.port}/api/server/info`
+    );
+    console.log("\n✅ Ready for production use!");
+    console.log(`\n🚀 Access KPanel at: http://${PUBLIC_IP}:${CONFIG.port}`);
   });
-});
+
+  // Graceful shutdown
+  process.on("SIGINT", () => {
+    console.log("\n🔄 Received SIGINT, shutting down gracefully");
+    server.close(() => {
+      db.close();
+      console.log("✅ Server closed");
+      process.exit(0);
+    });
+  });
+}
+
+// Start the server
+startServer().catch(console.error);
 
 process.on("SIGTERM", () => {
   console.log("\n🔄 Received SIGTERM, shutting down gracefully");
