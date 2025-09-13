@@ -130,16 +130,22 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install system dependencies
-RUN apk add --no-cache git curl
+RUN apk add --no-cache git curl unzip
 
 # Clone and setup KPanel
 RUN git clone https://github.com/herfaaljihad/kpanel.git . && \
     npm install --production --omit=dev
 
-# Try to download pre-built client, otherwise build it
+# Download pre-built client (NO BUILD - memory safe)
 RUN cd client && \
-    (curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.tar.gz | tar -xz || \
-     (npm install && npm run build)) && \
+    echo "Downloading pre-built client..." && \
+    (curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.zip -o client-dist.zip && \
+     unzip -o client-dist.zip && \
+     rm client-dist.zip && \
+     echo "Pre-built client installed successfully") || \
+    (echo "Pre-built client unavailable, creating minimal fallback..." && \
+     mkdir -p dist && \
+     echo '<!DOCTYPE html><html><head><title>KPanel</title></head><body><h1>KPanel Loading...</h1><script>setTimeout(function(){window.location.reload();},3000);</script></body></html>' > dist/index.html) && \
     cd ..
 
 # Create database directory
