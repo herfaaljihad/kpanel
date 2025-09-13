@@ -153,7 +153,8 @@ RUN mkdir -p database logs conf
 
 EXPOSE 2222
 
-CMD ["node", "kpanel-server-enterprise.js"]
+# Start the application with HTTP-only server
+CMD ["node", "docker-http-server.js"]
 EOF
 
     # Create optimized docker-compose file
