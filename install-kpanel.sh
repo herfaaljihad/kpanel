@@ -250,40 +250,75 @@ install_kpanel() {
     MEMORY_KB=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
     MEMORY_MB=$((MEMORY_KB / 1024))
     
-    if [ "$MEMORY_MB" -lt 512 ]; then
-        print_warning "Extremely low memory detected (${MEMORY_MB}MB). Using pre-built client fallback..."
+    if [ "$MEMORY_MB" -lt 600 ]; then
+        print_warning "Very low memory detected (${MEMORY_MB}MB). Using pre-built client..."
         
-        # Try to download pre-built client if available, otherwise use minimal build
-        if curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.tar.gz -o /tmp/client-dist.tar.gz 2>/dev/null; then
-            print_status "Downloading pre-built client..."
-            mkdir -p "$KPANEL_DIR/client/dist"
-            cd "$KPANEL_DIR/client"
-            if tar -xzf /tmp/client-dist.tar.gz 2>/dev/null || unzip -q /tmp/client-dist.tar.gz -d . 2>/dev/null; then
-                rm -f /tmp/client-dist.tar.gz
-                print_status "Pre-built client extracted successfully!"
-            else
-                print_warning "Failed to extract pre-built client, falling back to build..."
-                rm -f /tmp/client-dist.tar.gz
+        # For systems with <600MB, prioritize pre-built client over building
+        PREBUILT_SUCCESS=false
+        
+        # Try multiple sources for pre-built client
+        for url in "https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.tar.gz" \
+                   "https://github.com/herfaaljihad/kpanel/releases/latest/download/client-dist.tar.gz"; do
+            if curl -fsSL "$url" -o /tmp/client-dist.tar.gz 2>/dev/null; then
+                print_status "Downloading pre-built client from $(echo $url | cut -d'/' -f3)..."
+                mkdir -p "$KPANEL_DIR/client/dist"
+                cd "$KPANEL_DIR/client"
+                
+                if tar -xzf /tmp/client-dist.tar.gz 2>/dev/null || unzip -q /tmp/client-dist.tar.gz -d . 2>/dev/null; then
+                    rm -f /tmp/client-dist.tar.gz
+                    # Verify the build worked
+                    if [ -f "dist/index.html" ] && [ -d "dist/js" ]; then
+                        print_status "Pre-built client extracted and verified successfully!"
+                        PREBUILT_SUCCESS=true
+                        break
+                    else
+                        print_warning "Pre-built client verification failed, trying next source..."
+                    fi
+                else
+                    print_warning "Failed to extract pre-built client, trying next source..."
+                    rm -f /tmp/client-dist.tar.gz
+                fi
             fi
-        else
-            print_status "Pre-built client not available, attempting minimal build..."
-            # Create temporary swap and try minimal build
-            dd if=/dev/zero of=/tmp/kpanel-swap bs=1M count=1024 2>/dev/null || true
-            chmod 600 /tmp/kpanel-swap 2>/dev/null || true
-            mkswap /tmp/kpanel-swap 2>/dev/null || true
-            swapon /tmp/kpanel-swap 2>/dev/null || true
+        done
+        
+        # If pre-built client failed, try minimal build with very small heap
+        if [ "$PREBUILT_SUCCESS" = false ]; then
+            print_warning "Pre-built client not available, attempting minimal build..."
+            print_warning "This may fail on systems with less than 1GB RAM."
             
-            if ! build_client "NODE_OPTIONS='--max-old-space-size=256' npm run build"; then
-                print_error "Build failed due to insufficient memory. Please use a server with at least 1GB RAM or manually upload pre-built client files."
+            # Create large swap space for very low memory systems
+            if ! swapon --show | grep -q "/tmp/kpanel-swap"; then
+                print_status "Creating large temporary swap space (2GB)..."
+                dd if=/dev/zero of=/tmp/kpanel-swap bs=1M count=2048 2>/dev/null
+                chmod 600 /tmp/kpanel-swap
+                mkswap /tmp/kpanel-swap
+                swapon /tmp/kpanel-swap
+                SWAP_CREATED=true
+            fi
+            
+            # Use very small heap size and aggressive garbage collection
+            if ! build_client "NODE_OPTIONS='--max-old-space-size=128 --gc-interval=100' npm run build"; then
+                print_error "Build failed due to insufficient memory."
+                print_error "Your server has very low memory (${MEMORY_MB}MB)."
+                print_error ""
+                print_error "Recommended solutions (in order of preference):"
+                print_error "1. Use Docker installation (recommended):"
+                print_error "   bash <(curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/quick-install.sh)"
+                print_error "2. Upgrade to a server with at least 1GB RAM"
+                print_error "3. Use a VPS from DigitalOcean, Vultr, or Linode (\$5-6/month)"
+                print_error "4. See LOW-MEMORY-INSTALL.md for manual installation"
                 exit 1
             fi
             
-            swapoff /tmp/kpanel-swap 2>/dev/null || true
-            rm -f /tmp/kpanel-swap 2>/dev/null || true
+            # Clean up swap
+            if [ "$SWAP_CREATED" = true ]; then
+                swapoff /tmp/kpanel-swap
+                rm -f /tmp/kpanel-swap
+            fi
         fi
         
     elif [ "$MEMORY_MB" -lt 1024 ]; then
-        print_warning "Low memory detected (${MEMORY_MB}MB). Creating swap and using memory-optimized build..."
+        print_warning "Low memory detected (${MEMORY_MB}MB). Using memory-optimized build..."
         
         # Create temporary swap file if needed
         if ! swapon --show | grep -q "/tmp/kpanel-swap"; then
@@ -296,8 +331,12 @@ install_kpanel() {
         fi
         
         # Use conservative memory settings with retry
-        if ! build_client "NODE_OPTIONS='--max-old-space-size=512' npm run build"; then
-            print_error "Build failed even with memory optimizations. Consider using Docker installation or upgrading server memory."
+        if ! build_client "NODE_OPTIONS='--max-old-space-size=384' npm run build"; then
+            print_error "Build failed even with memory optimizations."
+            print_error "Consider using Docker installation or upgrading server memory."
+            print_error ""
+            print_error "Quick Docker installation:"
+            print_error "bash <(curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/quick-install.sh)"
             exit 1
         fi
         
