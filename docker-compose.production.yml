@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  kpanel:
+    build: .
+    container_name: kpanel
+    restart: unless-stopped
+    ports:
+      - "2222:2222"
+    volumes:
+      - kpanel_data:/app/database
+      - kpanel_logs:/app/logs
+      - kpanel_conf:/app/conf
+    environment:
+      - NODE_ENV=production
+      - PORT=2222
+      - DB_PATH=/app/database/kpanel.db
+      - ADMIN_EMAIL=admin@kpanel.local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2222/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - kpanel-network
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: kpanel-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - kpanel
+    networks:
+      - kpanel-network
+
+volumes:
+  kpanel_data:
+    driver: local
+  kpanel_logs:
+    driver: local
+  kpanel_conf:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  kpanel-network:
+    driver: bridge

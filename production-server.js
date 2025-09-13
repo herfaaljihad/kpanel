@@ -168,12 +168,10 @@ async function initializeServer() {
       // React Router catch-all handler
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {
-          return res
-            .status(404)
-            .json({
-              success: false,
-              message: `API endpoint not found: ${req.path}`,
-            });
+          return res.status(404).json({
+            success: false,
+            message: `API endpoint not found: ${req.path}`,
+          });
         }
         console.log(`ðŸ“„ Serving React app for route: ${req.path}`);
         res.sendFile(path.join(staticPath, "index.html"));
@@ -182,12 +180,10 @@ async function initializeServer() {
       console.log("âš ï¸ React build not found");
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {
-          return res
-            .status(404)
-            .json({
-              success: false,
-              message: `API endpoint not found: ${req.path}`,
-            });
+          return res.status(404).json({
+            success: false,
+            message: `API endpoint not found: ${req.path}`,
+          });
         }
         res.send(
           `<!DOCTYPE html><html><head><title>KPanel - Build Required</title></head><body><h1>ðŸŽ›ï¸ KPanel</h1><p>React build required. Run: cd client && npm run build</p><p><a href="/api/health">API Health</a></p></body></html>`
