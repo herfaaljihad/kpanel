@@ -228,6 +228,10 @@ config/production.js
 credentials/
 secrets/
 
+# Exception: Allow private repository documentation
+!PRIVATE_REPOSITORY_NOTICE.md
+!GITHUB_PRIVATE_SETUP_INSTRUCTIONS.md
+
 # VPS and deployment specific
 *.pem
 *.key
