@@ -66,8 +66,11 @@ async function initializeServer() {
       `http://127.0.0.1:3000`,
       `http://localhost:${PORT}`,
       `http://127.0.0.1:${PORT}`,
+      `http://${serverInfo.localIP}:3000`, // Vite dev server
       `http://${serverInfo.localIP}:${PORT}`,
+      `http://${serverInfo.publicIP}:3000`, // Vite dev server public
       `http://${serverInfo.publicIP}:${PORT}`,
+      `http://192.168.1.9:3000`, // Specific frontend address
     ];
 
     app.use(
@@ -97,6 +100,8 @@ async function initializeServer() {
               "'self'",
               `http://localhost:3000`,
               `http://127.0.0.1:3000`,
+              `http://${serverInfo.localIP}:3000`,
+              `http://192.168.1.9:3000`,
             ],
           },
         },

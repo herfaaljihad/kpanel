@@ -9,7 +9,7 @@ This repository contains proprietary code and sensitive configurations for KPane
 This repository is **PRIVATE** and **CONFIDENTIAL**. It contains:
 
 - **Proprietary Business Logic**: Custom-built control panel functionality
-- **Server Configurations**: Production server setups and optimizations  
+- **Server Configurations**: Production server setups and optimizations
 - **Database Schemas**: Custom database structures and relationships
 - **API Implementations**: Backend service integrations
 - **Frontend Components**: Custom React/Material-UI interfaces
@@ -41,6 +41,7 @@ If you have been granted access to this repository:
 ### 📞 Contact
 
 For access requests or security concerns:
+
 - **Project Owner**: Contact repository administrator
 - **Security Issues**: Report immediately to project maintainers
 
