@@ -12,6 +12,8 @@ yarn-error.log*
 .env.development
 .env.test
 .env.production
+.env.*
+!.env.example
 
 # Production builds
 client/dist/
@@ -213,3 +215,41 @@ installation_test_report_*.txt
 # Production files with sensitive data
 config/production.js
 .env.production
+
+# Private and sensitive files
+*.private.*
+*private*
+*secret*
+*key*
+*token*
+*password*
+.credentials
+.keys/
+credentials/
+secrets/
+
+# VPS and deployment specific
+*.pem
+*.key
+*.crt
+*.cert
+ssh_config
+deploy_keys/
+server_configs/
+
+# Backup files that might contain sensitive data
+*.backup.*
+*.bak
+*backup*
+
+# IDE and editor files
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db

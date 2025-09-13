@@ -1,4 +1,4 @@
-import react from "@vitejs/plugin-react";
+﻿import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // https://vitejs.dev/config/
@@ -9,33 +9,27 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        target: "http://localhost:3002", // Fixed: was 5000, now matches production
         changeOrigin: true,
+        secure: false,
+        ws: true,
       },
     },
   },
   build: {
-    // Optimasi untuk VPS 1GB RAM
     target: "esnext",
     minify: "terser",
-    sourcemap: false, // Disable sourcemap untuk save memory
+    sourcemap: false,
     rollupOptions: {
       output: {
-        // Split chunks untuk mengurangi memory usage
         manualChunks: {
           vendor: ["react", "react-dom"],
-          mui: [
-            "@mui/material",
-            "@mui/system",
-            "@emotion/react",
-            "@emotion/styled",
-          ],
+          mui: ["@mui/material", "@mui/system", "@emotion/react", "@emotion/styled"],
           icons: ["@mui/icons-material"],
           router: ["react-router-dom"],
           charts: ["recharts"],
           utils: ["axios", "react-query", "react-toastify"],
         },
-        // Optimasi chunk names
         chunkFileNames: "js/[name]-[hash].js",
         entryFileNames: "js/[name]-[hash].js",
         assetFileNames: (assetInfo) => {
@@ -50,37 +44,20 @@ export default defineConfig({
           return `assets/[name]-[hash][extname]`;
         },
       },
-      // Eksternal dependencies untuk mengurangi bundle size
-      external: [],
     },
-    // Terser options untuk memory optimization
     terserOptions: {
       compress: {
         drop_console: true,
         drop_debugger: true,
-        pure_funcs: ["console.log"],
       },
       mangle: {
         safari10: true,
       },
     },
-    // Chunk size warnings
     chunkSizeWarningLimit: 1000,
   },
-  // Memory optimization untuk low-end VPS
   optimizeDeps: {
-    include: [
-      "react",
-      "react-dom",
-      "@mui/material",
-      "@mui/system",
-      "@emotion/react",
-      "@emotion/styled",
-    ],
-    exclude: ["@mui/icons-material"],
+    include: ["react", "react-dom", "@mui/material", "@mui/system", "@emotion/react", "@emotion/styled"],
   },
-  // Performance settings
-  esbuild: {
-    logOverride: { "this-is-undefined-in-esm": "silent" },
-  },
+  base: "/",
 });
