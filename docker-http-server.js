@@ -36,41 +36,47 @@ function detectPublicIP() {
   return new Promise((resolve) => {
     // First try environment variable
     if (process.env.PUBLIC_IP) {
-      console.log("✅ Using PUBLIC_IP from environment:", process.env.PUBLIC_IP);
+      console.log(
+        "✅ Using PUBLIC_IP from environment:",
+        process.env.PUBLIC_IP
+      );
       resolve(process.env.PUBLIC_IP);
       return;
     }
 
     console.log("🔍 Detecting public IP address...");
-    
+
     try {
       const https = require("https");
-      const request = https.get("https://api.ipify.org", { timeout: 5000 }, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          const detectedIP = data.trim();
-          if (detectedIP && detectedIP !== "localhost") {
-            console.log("✅ Detected public IP:", detectedIP);
-            resolve(detectedIP);
-          } else {
-            console.log("⚠️ Invalid IP detected, using localhost");
-            resolve("localhost");
-          }
-        });
-      });
-      
+      const request = https.get(
+        "https://api.ipify.org",
+        { timeout: 5000 },
+        (res) => {
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            const detectedIP = data.trim();
+            if (detectedIP && detectedIP !== "localhost") {
+              console.log("✅ Detected public IP:", detectedIP);
+              resolve(detectedIP);
+            } else {
+              console.log("⚠️ Invalid IP detected, using localhost");
+              resolve("localhost");
+            }
+          });
+        }
+      );
+
       request.on("error", () => {
         console.log("⚠️ Could not detect public IP, using localhost");
         resolve("localhost");
       });
-      
+
       request.on("timeout", () => {
         request.destroy();
         console.log("⚠️ IP detection timeout, using localhost");
         resolve("localhost");
       });
-      
     } catch (error) {
       console.log("⚠️ IP detection failed, using localhost");
       resolve("localhost");
@@ -354,7 +360,7 @@ app.get("*", (req, res) => {
 async function startServer() {
   // Detect public IP first
   PUBLIC_IP = await detectPublicIP();
-  
+
   const server = app.listen(CONFIG.port, CONFIG.host, () => {
     console.log("\n🎉 KPanel Docker Server Started Successfully!");
     console.log("\n📊 Server Information:");

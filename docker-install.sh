@@ -66,9 +66,36 @@ detect_system() {
     echo -e "${GREEN}[INFO]${NC} Available Memory: ${MEMORY_MB}MB"
     
     if [ "$MEMORY_MB" -lt 512 ]; then
-        print_error "System has less than 512MB RAM. KPanel requires at least 512MB."
-        print_error "Please upgrade your server or use a larger VPS."
-        exit 1
+        print_warning "System has very limited memory (${MEMORY_MB}MB)."
+        echo ""
+        echo -e "${YELLOW}🚀 ULTRA LOW MEMORY SOLUTION AVAILABLE!${NC}"
+        echo "We have a specialized installer for systems with <512MB RAM."
+        echo ""
+        echo -e "${BLUE}Options:${NC}"
+        echo "1. Use Ultra Low Memory Installer (Recommended)"
+        echo "2. Continue with standard installer (May fail)"
+        echo "3. Exit and upgrade server"
+        echo ""
+        read -p "Choose option (1/2/3): " choice
+        
+        case $choice in
+            1)
+                print_status "Switching to Ultra Low Memory Installer..."
+                curl -sSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/docker-install-ultra-low-memory.sh | bash
+                exit 0
+                ;;
+            2)
+                print_warning "Continuing with standard installer. This may fail due to memory constraints."
+                ;;
+            3)
+                print_status "Exiting. Please upgrade your server to at least 512MB RAM."
+                exit 0
+                ;;
+            *)
+                print_error "Invalid choice. Exiting."
+                exit 1
+                ;;
+        esac
     elif [ "$MEMORY_MB" -lt 1024 ]; then
         print_warning "System has limited memory (${MEMORY_MB}MB). Docker installation recommended."
     fi
