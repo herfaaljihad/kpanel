@@ -126,30 +126,57 @@ setup_kpanel() {
     mkdir -p "$INSTALL_DIR"
     cd "$INSTALL_DIR"
     
-    # Download pre-built client if not exists
+    # Download all necessary files from GitHub
+    print_status "Downloading KPanel files..."
+    
+    # Download pre-built client
     if [ ! -f "client-dist.zip" ]; then
-        print_status "Downloading pre-built client..."
         curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.zip -o client-dist.zip || {
             print_error "Failed to download client files"
             exit 1
         }
     fi
     
+    # Download docker-http-server.js
+    curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/docker-http-server.js -o docker-http-server.js || {
+        print_error "Failed to download server file"
+        exit 1
+    }
+    
+    # Create minimal package.json for the container
+    cat > package.json << 'EOF'
+{
+  "name": "kpanel-ultra-low-memory",
+  "version": "2.0.0",
+  "description": "KPanel Ultra Low Memory Server",
+  "main": "docker-http-server.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "compression": "^1.7.4",
+    "sqlite3": "^5.1.6",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+EOF
+    
     # Create ultra-optimized Dockerfile
     cat > Dockerfile << 'EOF'
 FROM node:18-alpine
 
 # Install system dependencies
-RUN apk add --no-cache curl wget sqlite
+RUN apk add --no-cache curl wget sqlite python3 make g++
 
 WORKDIR /app
 
-# Copy package files
-COPY server/package.json ./
+# Copy package files first for better caching
+COPY package.json ./
 RUN npm install --production --no-audit --no-fund
 
 # Copy server files
-COPY server/ ./
 COPY docker-http-server.js ./
 
 # Extract pre-built client
@@ -165,7 +192,7 @@ ENV NODE_OPTIONS="--max-old-space-size=256"
 EXPOSE 2222
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+HEALTHCHECK --interval=60s --timeout=10s --start-period=180s --retries=2 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:2222/api/health || exit 1
 
 # Start the application
@@ -290,7 +317,7 @@ EOF
         if timeout 1200 docker-compose build --no-cache --memory=384m; then
             break
         else
-            if [ $i -eq 3 ]; then
+            if [ "$i" -eq 3 ]; then
                 print_error "Failed to build after 3 attempts"
                 exit 1
             fi
@@ -310,7 +337,7 @@ EOF
     for i in {1..12}; do  # 2 minute timeout
         if docker-compose ps | grep -q "Up"; then
             sleep 5
-            if curl -s http://localhost:$KPANEL_PORT/api/health >/dev/null 2>&1; then
+            if curl -s http://localhost:"$KPANEL_PORT"/api/health >/dev/null 2>&1; then
                 print_status "KPanel started successfully!"
                 return 0
             fi
@@ -353,10 +380,10 @@ configure_firewall() {
     print_status "Configuring firewall..."
     
     if command -v ufw >/dev/null 2>&1; then
-        ufw allow $KPANEL_PORT/tcp >/dev/null 2>&1
+        ufw allow "$KPANEL_PORT"/tcp >/dev/null 2>&1
         print_status "UFW configured for port $KPANEL_PORT"
     elif command -v firewall-cmd >/dev/null 2>&1; then
-        firewall-cmd --permanent --add-port=$KPANEL_PORT/tcp >/dev/null 2>&1
+        firewall-cmd --permanent --add-port="$KPANEL_PORT"/tcp >/dev/null 2>&1
         firewall-cmd --reload >/dev/null 2>&1
         print_status "Firewalld configured for port $KPANEL_PORT"
     else
