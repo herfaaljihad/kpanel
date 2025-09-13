@@ -193,11 +193,124 @@ install_kpanel() {
     cd "$KPANEL_DIR"
     sudo -u "$KPANEL_USER" npm install --production
     
+    # Build client with retry mechanism
+    build_client() {
+        local max_attempts=3
+        local attempt=1
+        local build_cmd="$1"
+        
+        while [ $attempt -le $max_attempts ]; do
+            print_status "Build attempt $attempt of $max_attempts..."
+            
+            if sudo -u "$KPANEL_USER" bash -c "$build_cmd"; then
+                print_status "Client build successful!"
+                return 0
+            else
+                print_warning "Build attempt $attempt failed"
+                if [ $attempt -eq $max_attempts ]; then
+                    return 1
+                fi
+                
+                # Clean up and prepare for retry
+                rm -rf "$KPANEL_DIR/client/dist" 2>/dev/null || true
+                rm -rf "$KPANEL_DIR/client/node_modules/.vite" 2>/dev/null || true
+                
+                # Increase swap if needed for retry
+                if [ $attempt -eq 2 ] && [ "$MEMORY_MB" -lt 1024 ]; then
+                    print_status "Adding more swap space for retry..."
+                    dd if=/dev/zero of=/tmp/kpanel-swap-extra bs=1M count=512 2>/dev/null || true
+                    chmod 600 /tmp/kpanel-swap-extra 2>/dev/null || true
+                    mkswap /tmp/kpanel-swap-extra 2>/dev/null || true
+                    swapon /tmp/kpanel-swap-extra 2>/dev/null || true
+                    EXTRA_SWAP_CREATED=true
+                fi
+                
+                attempt=$((attempt + 1))
+                sleep 5
+            fi
+        done
+        
+        return 1
+    }
+
     # Build client
     print_status "Building client application..."
     cd "$KPANEL_DIR/client"
     sudo -u "$KPANEL_USER" npm install
-    sudo -u "$KPANEL_USER" npm run build
+    
+    # Check available memory and adjust build strategy
+    MEMORY_KB=$(grep MemAvailable /proc/meminfo | awk '{print $2}')
+    MEMORY_MB=$((MEMORY_KB / 1024))
+    
+    if [ "$MEMORY_MB" -lt 512 ]; then
+        print_warning "Extremely low memory detected (${MEMORY_MB}MB). Using pre-built client fallback..."
+        
+        # Try to download pre-built client if available, otherwise use minimal build
+        if curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.tar.gz -o /tmp/client-dist.tar.gz 2>/dev/null; then
+            print_status "Downloading pre-built client..."
+            tar -xzf /tmp/client-dist.tar.gz -C "$KPANEL_DIR/client/"
+            rm -f /tmp/client-dist.tar.gz
+        else
+            print_status "Pre-built client not available, attempting minimal build..."
+            # Create temporary swap and try minimal build
+            dd if=/dev/zero of=/tmp/kpanel-swap bs=1M count=1024 2>/dev/null || true
+            chmod 600 /tmp/kpanel-swap 2>/dev/null || true
+            mkswap /tmp/kpanel-swap 2>/dev/null || true
+            swapon /tmp/kpanel-swap 2>/dev/null || true
+            
+            if ! build_client "NODE_OPTIONS='--max-old-space-size=256 --optimize-for-size' npm run build"; then
+                print_error "Build failed due to insufficient memory. Please use a server with at least 1GB RAM or manually upload pre-built client files."
+                exit 1
+            fi
+            
+            swapoff /tmp/kpanel-swap 2>/dev/null || true
+            rm -f /tmp/kpanel-swap 2>/dev/null || true
+        fi
+        
+    elif [ "$MEMORY_MB" -lt 1024 ]; then
+        print_warning "Low memory detected (${MEMORY_MB}MB). Creating swap and using memory-optimized build..."
+        
+        # Create temporary swap file if needed
+        if ! swapon --show | grep -q "/tmp/kpanel-swap"; then
+            print_status "Creating temporary swap space..."
+            dd if=/dev/zero of=/tmp/kpanel-swap bs=1M count=1024 2>/dev/null
+            chmod 600 /tmp/kpanel-swap
+            mkswap /tmp/kpanel-swap
+            swapon /tmp/kpanel-swap
+            SWAP_CREATED=true
+        fi
+        
+        # Use conservative memory settings with retry
+        if ! build_client "NODE_OPTIONS='--max-old-space-size=512 --optimize-for-size' npm run build"; then
+            print_error "Build failed even with memory optimizations. Consider using Docker installation or upgrading server memory."
+            exit 1
+        fi
+        
+        # Clean up swap if we created it
+        if [ "$SWAP_CREATED" = true ]; then
+            swapoff /tmp/kpanel-swap
+            rm -f /tmp/kpanel-swap
+        fi
+        
+        if [ "$EXTRA_SWAP_CREATED" = true ]; then
+            swapoff /tmp/kpanel-swap-extra 2>/dev/null || true
+            rm -f /tmp/kpanel-swap-extra 2>/dev/null || true
+        fi
+        
+    elif [ "$MEMORY_MB" -lt 2048 ]; then
+        print_warning "Limited memory detected (${MEMORY_MB}MB). Using memory-optimized build..."
+        # Use Node.js with increased heap size
+        if ! build_client "NODE_OPTIONS='--max-old-space-size=1024' npm run build"; then
+            print_error "Build failed. Please check system resources or consider Docker installation."
+            exit 1
+        fi
+    else
+        print_status "Building with standard configuration (${MEMORY_MB}MB available)..."
+        if ! build_client "npm run build"; then
+            print_error "Build failed. Please check system resources and try again."
+            exit 1
+        fi
+    fi
     
     print_status "KPanel installation completed"
 }

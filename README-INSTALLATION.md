@@ -2,6 +2,23 @@
 
 🚀 **Enterprise-ready web control panel with DirectAdmin-style installation**
 
+## System Requirements
+
+### Minimum Requirements
+
+- **RAM**: 512MB (with 1GB swap recommended)
+- **CPU**: 1 vCPU
+- **Storage**: 2GB free disk space
+- **OS**: Ubuntu 20.04+, Debian 11+, CentOS 8+, Rocky Linux 8+
+
+### Recommended Requirements
+
+- **RAM**: 1GB+ (for smooth installation and operation)
+- **CPU**: 2+ vCPU
+- **Storage**: 5GB+ free disk space
+
+⚠️ **Low Memory Systems**: If you have less than 1GB RAM, see [Low Memory Installation Guide](LOW-MEMORY-INSTALL.md)
+
 ## Quick Installation (Like DirectAdmin)
 
 ### One-Line Installation (Recommended)
@@ -23,7 +40,7 @@ powershell -Command "Invoke-WebRequest https://raw.githubusercontent.com/herfaal
 
 ## Installation Methods
 
-### 🐳 Docker Installation (Fastest - 2 minutes)
+### 🐳 Docker Installation (Fastest - 2 minutes, Low Memory Friendly)
 
 **Requirements:** Docker and Docker Compose
 
@@ -41,7 +58,7 @@ docker-compose up -d
 **Supported OS:** Ubuntu 20.04+, Debian 11+, CentOS 8+, Rocky Linux 8+
 
 ```bash
-# Full system installation
+# Full system installation with automatic memory optimization
 curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-kpanel.sh | bash
 
 # Access: http://your-server-ip:2222
@@ -84,15 +101,17 @@ After installation, KPanel is accessible at:
 ## Service Management
 
 ### Linux (SystemD)
+
 ```bash
 systemctl start kpanel    # Start service
-systemctl stop kpanel     # Stop service  
+systemctl stop kpanel     # Stop service
 systemctl restart kpanel  # Restart service
 systemctl status kpanel   # Check status
 journalctl -u kpanel -f   # View logs
 ```
 
 ### Linux (PM2)
+
 ```bash
 pm2 start ecosystem.config.json --env production
 pm2 stop kpanel
@@ -101,6 +120,7 @@ pm2 logs kpanel
 ```
 
 ### Docker
+
 ```bash
 docker-compose up -d      # Start services
 docker-compose down       # Stop services
@@ -109,6 +129,7 @@ docker-compose pull && docker-compose up -d  # Update
 ```
 
 ### Windows
+
 ```batch
 # Service (if NSSM installed)
 net start KPanel
@@ -120,22 +141,24 @@ start-kpanel.bat
 
 ## Configuration Files
 
-| File | Location | Purpose |
-|------|----------|---------|
-| `kpanel.conf` | `/usr/local/kpanel/conf/` | Main configuration |
-| `setup.txt` | `/usr/local/kpanel/conf/` | Admin credentials |
-| `.env` | `/usr/local/kpanel/` | Environment variables |
-| Database | `/usr/local/kpanel/database/` | SQLite database |
-| Logs | `/var/log/kpanel/` | Application logs |
+| File          | Location                      | Purpose               |
+| ------------- | ----------------------------- | --------------------- |
+| `kpanel.conf` | `/usr/local/kpanel/conf/`     | Main configuration    |
+| `setup.txt`   | `/usr/local/kpanel/conf/`     | Admin credentials     |
+| `.env`        | `/usr/local/kpanel/`          | Environment variables |
+| Database      | `/usr/local/kpanel/database/` | SQLite database       |
+| Logs          | `/var/log/kpanel/`            | Application logs      |
 
 ## System Requirements
 
 ### Minimum
+
 - **Memory:** 1GB RAM
 - **Storage:** 5GB free space
 - **OS:** Ubuntu 20.04+, Debian 11+, CentOS 8+, Windows 10+
 
 ### Recommended
+
 - **Memory:** 2GB+ RAM
 - **Storage:** 20GB+ free space
 - **Network:** Public IP for remote access
@@ -162,17 +185,18 @@ start-kpanel.bat
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/auth/login` | POST | User authentication |
-| `/api/auth/logout` | POST | User logout |
-| `/api/auth/profile` | GET | User profile |
-| `/api/system/info` | GET | System information |
+| Endpoint            | Method | Description         |
+| ------------------- | ------ | ------------------- |
+| `/api/health`       | GET    | Health check        |
+| `/api/auth/login`   | POST   | User authentication |
+| `/api/auth/logout`  | POST   | User logout         |
+| `/api/auth/profile` | GET    | User profile        |
+| `/api/system/info`  | GET    | System information  |
 
 ## Development
 
 ### Local Development Setup
+
 ```bash
 # Clone repository
 git clone https://github.com/herfaaljihad/kpanel.git
@@ -188,6 +212,7 @@ cd client && npm run dev  # Frontend (port 3000)
 ```
 
 ### Build for Production
+
 ```bash
 # Build client
 cd client && npm run build
@@ -201,12 +226,14 @@ node kpanel-server-enterprise.js
 ### Installation Issues
 
 **Permission Denied:**
+
 ```bash
 sudo chmod +x install-kpanel.sh
 sudo ./install-kpanel.sh
 ```
 
 **Port Already in Use:**
+
 ```bash
 # Change port in .env file
 echo "PORT=3333" >> .env
@@ -214,6 +241,7 @@ systemctl restart kpanel
 ```
 
 **Database Issues:**
+
 ```bash
 # Reset database
 rm -f /usr/local/kpanel/database/kpanel.db
@@ -223,6 +251,7 @@ systemctl restart kpanel
 ### Service Issues
 
 **Service Won't Start:**
+
 ```bash
 # Check logs
 journalctl -u kpanel -n 50
@@ -235,6 +264,7 @@ ls -la /usr/local/kpanel/
 ```
 
 **Memory Issues:**
+
 ```bash
 # Check memory usage
 free -h

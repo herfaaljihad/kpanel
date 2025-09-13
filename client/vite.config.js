@@ -18,10 +18,12 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
-    minify: "terser",
+    minify: "esbuild", // Changed from terser to esbuild for better memory efficiency
     sourcemap: false,
+    reportCompressedSize: false, // Disable compressed size reporting to save memory
     rollupOptions: {
       output: {
+        experimentalMinChunkSize: 1000, // Minimize chunk fragmentation
         manualChunks: {
           vendor: ["react", "react-dom"],
           mui: ["@mui/material", "@mui/system", "@emotion/react", "@emotion/styled"],
@@ -43,15 +45,6 @@ export default defineConfig({
           }
           return `assets/[name]-[hash][extname]`;
         },
-      },
-    },
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-      mangle: {
-        safari10: true,
       },
     },
     chunkSizeWarningLimit: 1000,
