@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  kpanel:
+    image: node:18-alpine
+    container_name: kpanel
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "
+      echo 'Starting KPanel Docker installation...' &&
+      apk add --no-cache git curl build-base python3 &&
+      echo 'Downloading KPanel source...' &&
+      git clone https://github.com/herfaaljihad/kpanel.git /app &&
+      cd /app &&
+      echo 'Installing server dependencies...' &&
+      npm install --production &&
+      echo 'Building client application...' &&
+      cd client && npm install && npm run build && cd .. &&
+      echo 'Starting KPanel server...' &&
+      node kpanel-server-enterprise.js"
+    ports:
+      - "2222:2222"
+    volumes:
+      - kpanel_data:/app/database
+      - kpanel_logs:/app/logs
+    environment:
+      - NODE_ENV=production
+      - PORT=2222
+      - DATABASE_PATH=/app/database/kpanel.db
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-kpanel123}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:2222 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    networks:
+      - kpanel-network
+
+volumes:
+  kpanel_data:
+    driver: local
+  kpanel_logs:
+    driver: local
+
+networks:
+  kpanel-network:
+    driver: bridge

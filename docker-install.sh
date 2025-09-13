@@ -121,9 +121,71 @@ setup_kpanel_docker() {
     mkdir -p "$KPANEL_DIR"
     cd "$KPANEL_DIR"
     
-    # Download docker-compose configuration
-    curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/docker-compose.production.yml -o docker-compose.yml
+    # Create a simple Dockerfile that uses pre-built client
+    print_status "Creating optimized Docker setup..."
     
+    cat > Dockerfile << 'EOF'
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache git curl
+
+# Clone and setup KPanel
+RUN git clone https://github.com/herfaaljihad/kpanel.git . && \
+    npm install --production --omit=dev
+
+# Try to download pre-built client, otherwise build it
+RUN cd client && \
+    (curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/client-dist.tar.gz | tar -xz || \
+     (npm install && npm run build)) && \
+    cd ..
+
+# Create database directory
+RUN mkdir -p database logs conf
+
+EXPOSE 2222
+
+CMD ["node", "kpanel-server-enterprise.js"]
+EOF
+
+    # Create optimized docker-compose file
+    cat > docker-compose.yml << 'EOF'
+version: "3.8"
+
+services:
+  kpanel:
+    build: .
+    container_name: kpanel
+    restart: unless-stopped
+    ports:
+      - "2222:2222"
+    volumes:
+      - kpanel_data:/app/database
+      - kpanel_logs:/app/logs
+      - kpanel_conf:/app/conf
+    environment:
+      - NODE_ENV=production
+      - PORT=2222
+      - DATABASE_PATH=/app/database/kpanel.db
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:2222 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  kpanel_data:
+  kpanel_logs:
+  kpanel_conf:
+EOF
+
     # Create environment file
     print_status "Generating configuration..."
     JWT_SECRET=$(openssl rand -hex 32)
@@ -136,7 +198,7 @@ NODE_ENV=production
 PORT=2222
 JWT_SECRET=$JWT_SECRET
 SESSION_SECRET=$SESSION_SECRET
-DATABASE_PATH=/usr/local/kpanel/database/kpanel.db
+DATABASE_PATH=/app/database/kpanel.db
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=$ADMIN_PASSWORD
 
@@ -144,18 +206,21 @@ ADMIN_PASSWORD=$ADMIN_PASSWORD
 COMPOSE_PROJECT_NAME=kpanel
 EOF
     
-    print_status "Starting KPanel services..."
+    print_status "Building and starting KPanel services..."
+    export DOCKER_BUILDKIT=1
+    docker-compose build --no-cache
     docker-compose up -d
     
     # Wait for services to start
     print_status "Waiting for services to initialize..."
-    sleep 10
+    sleep 20
     
     # Check if services are running
     if docker-compose ps | grep -q "Up"; then
         print_status "KPanel started successfully!"
     else
         print_error "Failed to start KPanel services"
+        docker-compose logs
         exit 1
     fi
 }
