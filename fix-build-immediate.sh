@@ -244,7 +244,7 @@ if [ "$BUILD_SUCCESS" != true ]; then
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-attr 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
     <title>KPanel - Loading...</title>
     <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAArklEQVRYhe2XwQ2AIAxFHxvgBEygE+gEOoFOoBPoBDqBTqAT6ARuwAt4kRBCqKLGxMR/6aW0/3/7S9sC/wQEQRAEQRAE8QcQQsBaC2MMlFLQWkNrDSEEhBBQSkEpBa01tNbQWkMpBSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBBfaQBgBcAS0VsAAAAASUVORK5CYII=">
     <style>
