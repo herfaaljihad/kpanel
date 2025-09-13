@@ -60,7 +60,7 @@ echo -e "${BLUE}ℹ️  This may take 5-20 minutes depending on server specs${NC
 # Build with progress monitoring
 BUILD_SUCCESS=false
 
-if timeout 1800s $BUILD_CMD; then
+if timeout 1800s "$BUILD_CMD"; then
     echo -e "${GREEN}✅ Build completed successfully!${NC}"
     BUILD_SUCCESS=true
 else
