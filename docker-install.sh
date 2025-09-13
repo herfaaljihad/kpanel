@@ -211,7 +211,18 @@ ADMIN_PASSWORD=$ADMIN_PASSWORD
 
 # Docker Configuration
 COMPOSE_PROJECT_NAME=kpanel
+
+# HTTP-Only Mode (Disable HTTPS)
+FORCE_HTTP=true
+DISABLE_HTTPS=true
+NO_SSL=true
+HTTP_ONLY=true
 EOF
+
+    # Replace generated compose file with our HTTP-optimized version
+    curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/docker-compose.docker-install.yml -o docker-compose.yml || {
+        print_warning "Could not download optimized compose file, using generated one"
+    }
     
     print_status "Building and starting KPanel services..."
     export DOCKER_BUILDKIT=1

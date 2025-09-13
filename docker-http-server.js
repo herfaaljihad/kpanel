@@ -141,12 +141,12 @@ console.log("✅ Serving static files from:", clientPath);
 // HTTP-fixing middleware for static assets
 app.use((req, res, next) => {
   const originalSend = res.send;
-  res.send = function(data) {
+  res.send = function (data) {
     // Check if this is a CSS or JS file response
-    if (req.path.endsWith('.css') || req.path.endsWith('.js')) {
-      if (typeof data === 'string') {
+    if (req.path.endsWith(".css") || req.path.endsWith(".js")) {
+      if (typeof data === "string") {
         // Replace HTTPS URLs with HTTP in CSS/JS content
-        data = data.replace(/https:\/\//g, 'http://');
+        data = data.replace(/https:\/\//g, "http://");
       }
     }
     originalSend.call(this, data);
@@ -247,27 +247,36 @@ app.get("*", (req, res) => {
   const indexPath = path.join(clientPath, "index.html");
   if (fs.existsSync(indexPath)) {
     console.log("📎 Serving HTTP-fixed static:", indexPath);
-    
+
     // Read the HTML file and replace HTTPS with HTTP
-    fs.readFile(indexPath, 'utf8', (err, data) => {
+    fs.readFile(indexPath, "utf8", (err, data) => {
       if (err) {
-        console.error('Error reading index.html:', err);
-        return res.status(500).send('Error serving page');
+        console.error("Error reading index.html:", err);
+        return res.status(500).send("Error serving page");
       }
-      
+
       // Replace all HTTPS URLs with HTTP
       let fixedHtml = data
-        .replace(/https:\/\//g, 'http://')  // Replace https:// with http://
-        .replace(/src="\/([^"]+)"/g, `src="http://${PUBLIC_IP}:${CONFIG.port}/$1"`)  // Fix relative URLs
-        .replace(/href="\/([^"]+)"/g, `href="http://${PUBLIC_IP}:${CONFIG.port}/$1"`)  // Fix relative href
-        .replace(/url\(\/([^)]+)\)/g, `url(http://${PUBLIC_IP}:${CONFIG.port}/$1)`);  // Fix CSS URLs
-      
+        .replace(/https:\/\//g, "http://") // Replace https:// with http://
+        .replace(
+          /src="\/([^"]+)"/g,
+          `src="http://${PUBLIC_IP}:${CONFIG.port}/$1"`
+        ) // Fix relative URLs
+        .replace(
+          /href="\/([^"]+)"/g,
+          `href="http://${PUBLIC_IP}:${CONFIG.port}/$1"`
+        ) // Fix relative href
+        .replace(
+          /url\(\/([^)]+)\)/g,
+          `url(http://${PUBLIC_IP}:${CONFIG.port}/$1)`
+        ); // Fix CSS URLs
+
       // Set proper headers for HTTP
-      res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.removeHeader('Strict-Transport-Security');
-      res.removeHeader('Content-Security-Policy');
-      
+      res.setHeader("Content-Type", "text/html");
+      res.setHeader("Cache-Control", "no-cache");
+      res.removeHeader("Strict-Transport-Security");
+      res.removeHeader("Content-Security-Policy");
+
       res.send(fixedHtml);
     });
   } else {
