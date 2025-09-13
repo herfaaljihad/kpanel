@@ -244,38 +244,110 @@ if [ "$BUILD_SUCCESS" != true ]; then
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
     <title>KPanel - Loading...</title>
+    <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAArklEQVRYhe2XwQ2AIAxFHxvgBEygE+gEOoFOoBPoBDqBTqAT6ARuwAt4kRBCqKLGxMR/6aW0/3/7S9sC/wQEQRAEQRAE8QcQQsBaC2MMlFLQWkNrDSEEhBBQSkEpBa01tNbQWkMpBSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBDQWkNrDSEEhBBfaQBgBcAS0VsAAAAASUVORK5CYII=">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-        .container { text-align: center; background: rgba(255,255,255,0.95); padding: 2rem; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); max-width: 500px; margin: 20px; }
-        .spinner { width: 60px; height: 60px; margin: 0 auto 20px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        h1 { color: #333; margin-bottom: 10px; }
-        .status { color: #666; margin: 20px 0; }
-        .info { background: #e8f2ff; padding: 15px; border-radius: 10px; margin: 20px 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+        }
+        .container { 
+            text-align: center; 
+            background: rgba(255,255,255,0.95); 
+            padding: 2rem; 
+            border-radius: 20px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
+            max-width: 500px; 
+            margin: 20px; 
+        }
+        .spinner { 
+            width: 60px; 
+            height: 60px; 
+            margin: 0 auto 20px; 
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid #667eea; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        h1 { 
+            color: #333; 
+            margin-bottom: 10px; 
+        }
+        .status { 
+            color: #666; 
+            margin: 20px 0; 
+            font-size: 16px;
+        }
+        .info { 
+            background: #e8f2ff; 
+            padding: 15px; 
+            border-radius: 10px; 
+            margin: 20px 0; 
+        }
+        .btn {
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 10px;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #5a6fd8;
+        }
     </style>
-    <script>
-        setTimeout(function() {
-            fetch('/api/health').then(r => r.json()).then(data => {
-                if (data.status === 'ok') {
-                    document.querySelector('.status').textContent = 'KPanel Backend Ready!';
-                }
-            }).catch(() => {
-                document.querySelector('.status').textContent = 'Connecting to KPanel...';
-            });
-        }, 2000);
-    </script>
 </head>
 <body>
     <div class="container">
         <div class="spinner"></div>
         <h1>🎛️ KPanel</h1>
-        <p class="status">Initializing dashboard...</p>
+        <p class="status" id="status">Initializing dashboard...</p>
         <div class="info">
             <strong>Modern Hosting Control Panel</strong><br>
             Backend is ready. Frontend optimizations in progress.
         </div>
+        <div>
+            <a href="/api/health" class="btn">🔍 Health Check</a>
+            <a href="#" class="btn" onclick="location.reload()">🔄 Refresh</a>
+        </div>
     </div>
+    
+    <script>
+        // Check backend health
+        function checkHealth() {
+            fetch('/api/health')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        document.getElementById('status').textContent = 'KPanel Backend Ready!';
+                        document.getElementById('status').style.color = '#28a745';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('status').textContent = 'Connecting to KPanel...';
+                    console.log('Health check failed:', error);
+                });
+        }
+        
+        // Check health on load and every 5 seconds
+        checkHealth();
+        setInterval(checkHealth, 5000);
+    </script>
 </body>
 </html>
 FALLBACK_EOF
