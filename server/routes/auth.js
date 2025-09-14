@@ -3,16 +3,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 
-// Use demo mode check to import correct database config
-const isDemoMode = process.env.DEMO_MODE === "true";
-let databaseConfig;
-if (isDemoMode) {
-  console.log("Auth: Loading mock database config");
-  databaseConfig = require("../config/database_mock");
-} else {
-  console.log("Auth: Loading SQLite database config");
-  databaseConfig = require("../config/database");
-}
+// Use production database config
+const databaseConfig = require("../config/database");
 const { queryHelpers } = databaseConfig;
 
 const { logger } = require("../utils/logger");

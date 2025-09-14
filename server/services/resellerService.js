@@ -4,6 +4,7 @@
 const fs = require("fs").promises;
 const path = require("path");
 const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const { logger } = require("../utils/logger");
 const databaseService = require("./databaseService");
 const billingService = require("./billingService");
@@ -1169,13 +1170,39 @@ class ResellerService {
   }
 
   async createCustomerUser(customerData) {
-    // This would integrate with user management
-    // For now, return mock data
-    return {
-      userId: Date.now(),
-      email: customerData.email,
-      name: customerData.name,
-    };
+    try {
+      // Create real user in database
+      const userData = {
+        email: customerData.email,
+        name: customerData.name,
+        role: "user",
+        created_at: new Date().toISOString(),
+        status: "active",
+        // Generate secure password hash if password provided
+        password_hash: customerData.password
+          ? await bcrypt.hash(customerData.password, 12)
+          : await bcrypt.hash(Math.random().toString(36), 12), // Temporary password
+      };
+
+      const userId = await queryHelpers.safeInsert("users", userData);
+
+      logger.info(`Created customer user for reseller`, {
+        userId: userId,
+        email: customerData.email,
+        resellerId: customerData.resellerId,
+      });
+
+      return {
+        userId: userId,
+        email: customerData.email,
+        name: customerData.name,
+        status: "active",
+        created_at: userData.created_at,
+      };
+    } catch (error) {
+      logger.error("Error creating customer user:", error);
+      throw new Error(`Failed to create customer user: ${error.message}`);
+    }
   }
 
   async setupPrivateNameservers(resellerId) {

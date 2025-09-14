@@ -395,39 +395,33 @@ router.get("/:id/logs", authenticateToken, async (req, res) => {
       });
     }
 
-    // Mock execution history (in production, store in separate table)
-    const executions = [];
-    const executionCount = Math.min(parseInt(limit), 50);
+    // Get execution history from database
+    const executions = await queryHelpers.safeSelect("cron_executions", {
+      where: { cron_job_id: cronJob.id },
+      orderBy: [{ column: "started_at", direction: "DESC" }],
+      limit: Math.min(parseInt(limit), 50),
+    });
 
-    for (let i = 0; i < executionCount; i++) {
-      const timestamp = new Date(
-        Date.now() - (i * 24 * 60 * 60 * 1000 + Math.random() * 60 * 60 * 1000)
-      );
-      const exitCode = Math.random() > 0.9 ? 1 : 0; // 10% failure rate
-
-      executions.push({
-        id: i + 1,
-        started_at: timestamp.toISOString(),
-        completed_at: new Date(
-          timestamp.getTime() + Math.random() * 30000
-        ).toISOString(),
-        exit_code: exitCode,
-        output:
-          exitCode === 0
-            ? `Job executed successfully at ${timestamp.toISOString()}`
-            : `Error: Command failed with exit code ${exitCode}`,
-        duration: Math.floor(Math.random() * 30000), // Duration in ms
-        trigger: Math.random() > 0.8 ? "manual" : "scheduled",
-      });
-    }
+    // Format execution data
+    const formattedExecutions = executions.map((execution) => ({
+      id: execution.id,
+      started_at: execution.started_at,
+      completed_at: execution.completed_at,
+      exit_code: execution.exit_code,
+      output:
+        execution.output ||
+        (execution.exit_code === 0
+          ? `Job executed successfully at ${execution.started_at}`
+          : `Error: Command failed with exit code ${execution.exit_code}`),
+      duration: execution.duration || 0,
+      trigger: execution.trigger || "scheduled",
+    }));
 
     res.json({
       success: true,
       data: {
         job_name: cronJob.name,
-        executions: executions.sort(
-          (a, b) => new Date(b.started_at) - new Date(a.started_at)
-        ),
+        executions: formattedExecutions,
         summary: {
           total_executions: executions.length,
           successful: executions.filter((e) => e.exit_code === 0).length,
@@ -503,25 +497,59 @@ async function executeCronJob(cronJob) {
       }
     );
 
-    // Mock command execution (in production, execute actual command)
-    const mockExecution = new Promise((resolve, reject) => {
-      setTimeout(() => {
-        if (Math.random() > 0.1) {
-          // 90% success rate
-          resolve({
-            stdout: `Cron job '${
-              cronJob.name
-            }' executed successfully at ${startTime.toISOString()}`,
-            stderr: "",
-            exitCode: 0,
-          });
-        } else {
-          reject(new Error("Mock command execution failed"));
-        }
-      }, Math.random() * 5000 + 1000); // 1-6 seconds execution time
+    // Real command execution using child_process
+    const { spawn } = require("child_process");
+    const os = require("os");
+
+    const commandExecution = new Promise((resolve, reject) => {
+      // Parse command for shell execution
+      const isWindows = os.platform() === "win32";
+      const shell = isWindows ? "cmd.exe" : "/bin/bash";
+      const shellFlag = isWindows ? "/c" : "-c";
+
+      const child = spawn(shell, [shellFlag, cronJob.command], {
+        timeout: 60000, // 60 second timeout
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      child.stdout.on("data", (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr.on("data", (data) => {
+        stderr += data.toString();
+      });
+
+      child.on("close", (code) => {
+        resolve({
+          stdout: stdout,
+          stderr: stderr,
+          exitCode: code || 0,
+        });
+      });
+
+      child.on("error", (error) => {
+        reject(error);
+      });
     });
 
-    const result = await mockExecution;
+    const result = await commandExecution;
+    const endTime = new Date();
+    const duration = endTime.getTime() - startTime.getTime();
+
+    // Log execution to database
+    await queryHelpers.safeInsert("cron_executions", {
+      cron_job_id: cronJob.id,
+      started_at: startTime.toISOString(),
+      completed_at: endTime.toISOString(),
+      exit_code: result.exitCode,
+      output: result.stdout || result.stderr,
+      duration: duration,
+      trigger: "manual",
+    });
 
     // Update job with success
     await queryHelpers.update(
@@ -539,6 +567,20 @@ async function executeCronJob(cronJob) {
       duration: Date.now() - startTime.getTime(),
     });
   } catch (error) {
+    const endTime = new Date();
+    const duration = endTime.getTime() - startTime.getTime();
+
+    // Log failed execution to database
+    await queryHelpers.safeInsert("cron_executions", {
+      cron_job_id: cronJob.id,
+      started_at: startTime.toISOString(),
+      completed_at: endTime.toISOString(),
+      exit_code: 1,
+      output: error.message,
+      duration: duration,
+      trigger: "manual",
+    });
+
     // Update job with failure
     await queryHelpers.update(
       "cron_jobs",
@@ -560,4 +602,3 @@ async function executeCronJob(cronJob) {
 }
 
 module.exports = router;
-

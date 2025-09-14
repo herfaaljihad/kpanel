@@ -451,7 +451,7 @@ router.get("/propagation/:domain", authenticateToken, async (req, res) => {
       });
     }
 
-    // Mock DNS propagation check
+    // Real DNS propagation check
     const propagationData = await checkDNSPropagation(domain, record_type);
 
     res.json({
@@ -634,35 +634,100 @@ function getDNSTemplates() {
 }
 
 async function checkDNSPropagation(domain, recordType) {
-  // Mock DNS propagation check
+  const dns = require("dns").promises;
   const nameservers = [
-    "8.8.8.8",
+    "8.8.8.8", // Google
     "8.8.4.4", // Google
-    "1.1.1.1",
+    "1.1.1.1", // Cloudflare
     "1.0.0.1", // Cloudflare
-    "208.67.222.222",
+    "208.67.222.222", // OpenDNS
     "208.67.220.220", // OpenDNS
-    "9.9.9.9",
+    "9.9.9.9", // Quad9
     "149.112.112.112", // Quad9
   ];
 
   const results = [];
 
   for (const ns of nameservers) {
-    // Mock result
-    const propagated = Math.random() > 0.2; // 80% propagation rate
-    const value = propagated ? "192.168.1.100" : null;
-    const responseTime = Math.floor(Math.random() * 200 + 50);
+    try {
+      const startTime = Date.now();
 
-    results.push({
-      nameserver: ns,
-      location: getNameserverLocation(ns),
-      propagated: propagated,
-      value: value,
-      response_time: responseTime,
-      status: propagated ? "success" : "failed",
-      error: propagated ? null : "NXDOMAIN",
-    });
+      // Set resolver to use specific nameserver
+      const resolver = new dns.Resolver();
+      resolver.setServers([ns]);
+
+      let value = null;
+      let propagated = false;
+      let error = null;
+
+      try {
+        switch (recordType.toUpperCase()) {
+          case "A":
+            const aRecords = await resolver.resolve4(domain);
+            value = aRecords.length > 0 ? aRecords[0] : null;
+            propagated = aRecords.length > 0;
+            break;
+
+          case "AAAA":
+            const aaaaRecords = await resolver.resolve6(domain);
+            value = aaaaRecords.length > 0 ? aaaaRecords[0] : null;
+            propagated = aaaaRecords.length > 0;
+            break;
+
+          case "CNAME":
+            const cnameRecords = await resolver.resolveCname(domain);
+            value = cnameRecords.length > 0 ? cnameRecords[0] : null;
+            propagated = cnameRecords.length > 0;
+            break;
+
+          case "MX":
+            const mxRecords = await resolver.resolveMx(domain);
+            value =
+              mxRecords.length > 0
+                ? `${mxRecords[0].priority} ${mxRecords[0].exchange}`
+                : null;
+            propagated = mxRecords.length > 0;
+            break;
+
+          case "TXT":
+            const txtRecords = await resolver.resolveTxt(domain);
+            value = txtRecords.length > 0 ? txtRecords[0].join(" ") : null;
+            propagated = txtRecords.length > 0;
+            break;
+
+          default:
+            // Default to A record
+            const defaultRecords = await resolver.resolve4(domain);
+            value = defaultRecords.length > 0 ? defaultRecords[0] : null;
+            propagated = defaultRecords.length > 0;
+        }
+      } catch (lookupError) {
+        error = lookupError.message;
+        propagated = false;
+      }
+
+      const responseTime = Date.now() - startTime;
+
+      results.push({
+        nameserver: ns,
+        location: getNameserverLocation(ns),
+        propagated: propagated,
+        value: value,
+        response_time: responseTime,
+        status: error ? "error" : "success",
+        error: error,
+      });
+    } catch (resolverError) {
+      results.push({
+        nameserver: ns,
+        location: getNameserverLocation(ns),
+        propagated: false,
+        value: null,
+        response_time: 0,
+        status: "error",
+        error: resolverError.message,
+      });
+    }
   }
 
   const propagatedCount = results.filter((r) => r.propagated).length;
@@ -703,4 +768,3 @@ function getNameserverLocation(ip) {
 }
 
 module.exports = router;
-

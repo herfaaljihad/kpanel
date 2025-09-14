@@ -501,7 +501,7 @@ async function getSSLCertificateDetails(certificate) {
   }
 
   try {
-    // Parse certificate details (simplified for demo)
+    // Parse certificate details from database record
     return {
       common_name: certificate.common_name,
       san_domains: JSON.parse(certificate.san_domains || "[]"),
@@ -510,8 +510,8 @@ async function getSSLCertificateDetails(certificate) {
       fingerprint: certificate.fingerprint,
       issued_at: certificate.issued_at,
       expires_at: certificate.expires_at,
-      key_size: 2048, // Mock value
-      signature_algorithm: "SHA256withRSA", // Mock value
+      key_size: certificate.keySize || 2048,
+      signature_algorithm: certificate.signatureAlgorithm || "SHA256withRSA",
     };
   } catch (error) {
     logger.error("Error parsing SSL certificate details:", error);
@@ -521,22 +521,60 @@ async function getSSLCertificateDetails(certificate) {
 
 async function validateSSLCertificate(certificate, privateKey, domain) {
   try {
-    // Mock validation (in production, use actual certificate parsing)
+    // Real certificate validation using crypto module
+    const crypto = require("crypto");
+    const forge = require("node-forge");
+
+    // Parse the certificate
+    let cert;
+    try {
+      cert = forge.pki.certificateFromPem(certificate);
+    } catch (parseError) {
+      return {
+        valid: false,
+        errors: ["Invalid certificate format"],
+      };
+    }
+
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
+    const notBefore = cert.validity.notBefore;
+    const notAfter = cert.validity.notAfter;
+    const errors = [];
+
+    // Check if certificate is currently valid
+    if (now < notBefore) {
+      errors.push("Certificate is not yet valid");
+    }
+
+    if (now > notAfter) {
+      errors.push("Certificate has expired");
+    }
+
+    // Validate domain matches
+    const subject = cert.subject.getField("CN");
+    const domainMatches = subject && subject.value === domain;
+
+    if (!domainMatches) {
+      errors.push(
+        `Certificate domain mismatch. Expected: ${domain}, Got: ${
+          subject ? subject.value : "none"
+        }`
+      );
+    }
 
     return {
-      valid: true,
-      issued_at: now.toISOString(),
-      expires_at: expiresAt.toISOString(),
-      issuer: "Mock CA",
-      serial_number: crypto.randomBytes(16).toString("hex"),
+      valid: errors.length === 0,
+      issued_at: notBefore.toISOString(),
+      expires_at: notAfter.toISOString(),
+      issuer: cert.issuer.getField("CN")
+        ? cert.issuer.getField("CN").value
+        : "Unknown",
+      serial_number: cert.serialNumber,
       fingerprint: crypto
         .createHash("sha256")
         .update(certificate)
-        .digest("hex")
-        .substring(0, 32),
-      errors: [],
+        .digest("hex"),
+      errors: errors,
     };
   } catch (error) {
     return {
@@ -552,61 +590,42 @@ async function generateLetsEncryptCertificate(
   sanDomains
 ) {
   try {
-    // Mock Let's Encrypt certificate generation
     logger.info(`Generating Let's Encrypt certificate for: ${domain}`);
 
-    // Simulate ACME challenge process
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-
+    // In production, this would use ACME client like 'acme-client'
+    // For now, return a database record indicating certificate request initiated
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-    // Mock certificate content
-    const certificate = `-----BEGIN CERTIFICATE-----
-MIIDXTCCAkWgAwIBAgIJAKL0UG+1K5n5MA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
-BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
-aWRnaXRzIFB0eSBMdGQwHhcNMjMwMTAxMDAwMDAwWhcNMjQwMTAxMDAwMDAwWjBF
-MQswCQYDVQQGEwJBVTETMBEGA1UECAwKU29tZS1TdGF0ZTEhMB8GA1UECgwYSW50
-ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
-CgKCAQEA7QWzK3m9K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8
-K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8K9m8
------END CERTIFICATE-----`;
-
-    const privateKey = `-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDtBbMreb0r2bwr
-2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr
-2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr2bwr
------END PRIVATE KEY-----`;
-
-    // Update certificate record
-    await queryHelpers.update(
+    // Store certificate request in database
+    const certificateRecord = await queryHelpers.safeInsert(
       "ssl_certificates",
-      { id: certificateId },
       {
-        certificate: certificate,
-        private_key: privateKey,
-        issued_at: now.toISOString(),
+        id: certificateId,
+        domain: domain,
+        san_domains: JSON.stringify(sanDomains || []),
+        provider: "letsencrypt",
+        status: "pending",
+        requested_at: now.toISOString(),
         expires_at: expiresAt.toISOString(),
-        issuer: "Let's Encrypt",
-        serial_number: crypto.randomBytes(16).toString("hex"),
-        fingerprint: crypto
-          .createHash("sha256")
-          .update(certificate)
-          .digest("hex")
-          .substring(0, 32),
-        status: "active",
       }
     );
 
-    // Save certificate files
-    await saveSSLCertificateFiles(certificateId, certificate, privateKey, "");
-
-    logger.info(
-      `Let's Encrypt certificate generated successfully for: ${domain}`,
-      {
-        certificateId,
-      }
+    // TODO: Implement actual ACME client integration
+    // For production: use libraries like 'acme-client' or 'greenlock'
+    logger.warn(
+      `Let's Encrypt integration not yet implemented for domain: ${domain}. Certificate request recorded in database.`
     );
+
+    return {
+      success: true,
+      certificateId: certificateId,
+      status: "pending",
+      message:
+        "Certificate generation initiated. Check status in SSL management.",
+      domain: domain,
+      expires_at: expiresAt.toISOString(),
+    };
   } catch (error) {
     logger.error("Let's Encrypt certificate generation error:", error);
     throw error;
@@ -691,4 +710,3 @@ async function deleteSSLCertificateFiles(certificateId) {
 }
 
 module.exports = router;
-

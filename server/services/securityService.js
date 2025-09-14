@@ -16,7 +16,15 @@ class SecurityService {
   // Firewall Management
   async enableFirewall() {
     if (!this.isLinux) {
-      return { success: true, mock: true, message: "Mock: Firewall enabled" };
+      // For Windows, log the action but note it's not implemented
+      this.logSecurityEvent(
+        "FIREWALL_ENABLE_REQUESTED",
+        "Firewall enable requested on non-Linux system"
+      );
+      return {
+        success: false,
+        message: "Firewall management only supported on Linux systems",
+      };
     }
 
     try {
@@ -43,7 +51,14 @@ class SecurityService {
 
   async disableFirewall() {
     if (!this.isLinux) {
-      return { success: true, mock: true, message: "Mock: Firewall disabled" };
+      this.logSecurityEvent(
+        "FIREWALL_DISABLE_REQUESTED",
+        "Firewall disable requested on non-Linux system"
+      );
+      return {
+        success: false,
+        message: "Firewall management only supported on Linux systems",
+      };
     }
 
     try {
@@ -119,10 +134,14 @@ class SecurityService {
     from = "any"
   ) {
     if (!this.isLinux) {
-      console.log(
-        `Mock: Add firewall rule - ${action} ${port}/${protocol} from ${from}`
+      this.logSecurityEvent(
+        "FIREWALL_RULE_REQUESTED",
+        `Firewall rule requested: ${action} ${port}/${protocol} from ${from}`
       );
-      return { success: true, mock: true };
+      return {
+        success: false,
+        message: "Firewall rule management only supported on Linux systems",
+      };
     }
 
     try {
@@ -154,8 +173,14 @@ class SecurityService {
     this.blockedIPs.add(ip);
 
     if (!this.isLinux) {
-      console.log(`Mock: Block IP ${ip} - ${reason}`);
-      return { success: true, mock: true };
+      this.logSecurityEvent(
+        "IP_BLOCK_REQUESTED",
+        `IP block requested: ${ip} - ${reason}`
+      );
+      return {
+        success: false,
+        message: "IP blocking only supported on Linux systems",
+      };
     }
 
     try {
@@ -183,8 +208,14 @@ class SecurityService {
     this.blockedIPs.delete(ip);
 
     if (!this.isLinux) {
-      console.log(`Mock: Unblock IP ${ip}`);
-      return { success: true, mock: true };
+      this.logSecurityEvent(
+        "IP_UNBLOCK_REQUESTED",
+        `IP unblock requested: ${ip}`
+      );
+      return {
+        success: false,
+        message: "IP unblocking only supported on Linux systems",
+      };
     }
 
     try {

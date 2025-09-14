@@ -837,26 +837,56 @@ class BillingService {
   }
 
   async processStripePayment(paymentData) {
-    // Mock Stripe payment processing
-    // In production, would use Stripe SDK
-    logger.info("Processing Stripe payment", { amount: paymentData.amount });
+    try {
+      // In production, would use actual Stripe SDK
+      // For now, validate payment data and create database record
+      logger.info("Processing Stripe payment", { amount: paymentData.amount });
 
-    // Simulate payment processing
-    const success = Math.random() > 0.1; // 90% success rate for demo
+      if (!paymentData.amount || paymentData.amount <= 0) {
+        return {
+          success: false,
+          error: "Invalid payment amount",
+        };
+      }
 
-    if (success) {
+      // Create payment record in database
+      const paymentRecord = await queryHelpers.safeInsert("payments", {
+        user_id: paymentData.userId,
+        amount: paymentData.amount,
+        currency: paymentData.currency || "USD",
+        gateway: "stripe",
+        status: "processing",
+        payment_method: paymentData.paymentMethod || "card",
+        created_at: new Date().toISOString(),
+      });
+
+      // In production, this would call Stripe API
+      // For development, we'll mark as completed
+      const paymentId = `pi_${Date.now()}_${paymentRecord.insertId}`;
+
+      await queryHelpers.safeUpdate(
+        "payments",
+        {
+          payment_id: paymentId,
+          status: "completed",
+          updated_at: new Date().toISOString(),
+        },
+        {
+          where: { id: paymentRecord.insertId },
+        }
+      );
+
       return {
         success: true,
-        paymentId: `pi_${Date.now()}_${Math.random()
-          .toString(36)
-          .substring(2)}`,
+        paymentId,
         amount: paymentData.amount,
-        currency: paymentData.currency,
+        currency: paymentData.currency || "USD",
       };
-    } else {
+    } catch (error) {
+      logger.error("Stripe payment processing failed:", error);
       return {
         success: false,
-        error: "Payment declined by bank",
+        error: error.message || "Payment processing failed",
       };
     }
   }

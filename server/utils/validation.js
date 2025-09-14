@@ -49,12 +49,17 @@ class InputValidator {
       return this.addError(field, "Email is required");
     }
     if (email) {
-      // Custom validation for demo environment - allow .local domains
+      // Email validation with optional .local domains for development
       const isValidEmail =
-        validator.isEmail(email, {
-          allow_utf8_local_part: false,
-          domain_specific_validation: false,
-        }) || /^[^\s@]+@[^\s@]+\.local$/.test(email);
+        process.env.NODE_ENV === "development"
+          ? validator.isEmail(email, {
+              allow_utf8_local_part: false,
+              domain_specific_validation: false,
+            }) || /^[^\s@]+@[^\s@]+\.local$/.test(email)
+          : validator.isEmail(email, {
+              allow_utf8_local_part: false,
+              domain_specific_validation: true,
+            });
 
       if (!isValidEmail) {
         return this.addError(field, "Invalid email format");

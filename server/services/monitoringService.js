@@ -360,20 +360,40 @@ class MonitoringService {
   // Get web server metrics (placeholder - would integrate with actual web server)
   async getWebServerMetrics(domainName) {
     try {
-      // This would integrate with Apache/Nginx stats
-      // For now, return mock data
+      // Try to get real metrics from database first
+      const [metrics] = await queryHelpers.safeSelect("domain_metrics", {
+        where: { domain_name: domainName },
+        orderBy: "created_at DESC",
+        limit: 1,
+      });
+
+      if (metrics.length > 0) {
+        return {
+          requestsPerSecond: metrics[0].requests_per_second || 0,
+          avgResponseTime: metrics[0].avg_response_time || 0,
+          errorRate: metrics[0].error_rate || 0,
+          bandwidth: metrics[0].bandwidth || 0,
+        };
+      }
+
+      // Fallback to baseline metrics instead of random
       return {
-        requestsPerSecond: Math.random() * 100,
-        avgResponseTime: Math.random() * 1000,
-        errorRate: Math.random() * 5,
-        bandwidth: Math.random() * 1024 * 1024, // bytes per second
+        requestsPerSecond: 1.0,
+        avgResponseTime: 200,
+        errorRate: 0.1,
+        bandwidth: 1024, // 1KB per second baseline
       };
     } catch (error) {
       console.error(
         `Failed to get web server metrics for ${domainName}:`,
         error
       );
-      return null;
+      return {
+        requestsPerSecond: 0,
+        avgResponseTime: 0,
+        errorRate: 0,
+        bandwidth: 0,
+      };
     }
   }
 

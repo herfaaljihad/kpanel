@@ -326,78 +326,9 @@ const queryHelpers = {
   },
 };
 
-// Import mock database for demo mode
-const { mockDatabase } = require("./database_mock");
-
-// Mock query helpers for demo mode
-const mockQueryHelpers = {
-  async safeSelect(table, options = {}) {
-    const { where = {} } = options;
-    
-    console.log(`Mock safeSelect called - table: ${table}, where:`, where);
-    
-    if (table === "users") {
-      if (where.email && where.status) {
-        console.log(`Looking for user with email: ${where.email}, status: ${where.status}`);
-        const users = await mockDatabase.findUserByEmail(where.email);
-        console.log(`Found users:`, users);
-        return [users]; // users is already an array, so wrap it with another array for mysql format
-      }
-      if (where.email) { // Just email without status
-        console.log(`Looking for user with email: ${where.email}`);
-        const users = await mockDatabase.findUserByEmail(where.email);
-        console.log(`Found users:`, users);
-        return [users]; // users is already an array, so wrap it with another array for mysql format
-      }
-      if (where.id) {
-        const user = await mockDatabase.getUserById(where.id);
-        return [user];
-      }
-      const users = await mockDatabase.getAllUsers();
-      return [users];
-    }
-    
-    return [[]]; // Default empty result for other tables
-  },
-
-  async safeInsert(table, data) {
-    if (table === "users") {
-      const result = await mockDatabase.createUser(data);
-      return [{ insertId: result.insertId }];
-    }
-    return [{ insertId: 1 }];
-  },
-
-  async safeUpdate(table, data, where) {
-    if (table === "users" && where.id) {
-      const result = await mockDatabase.updateUser(where.id, data);
-      return [{ affectedRows: result.affectedRows }];
-    }
-    return [{ affectedRows: 1 }];
-  },
-
-  async safeDelete(table, where) {
-    if (table === "users" && where.id) {
-      const result = await mockDatabase.deleteUser(where.id);
-      return [{ affectedRows: result.affectedRows }];
-    }
-    return [{ affectedRows: 1 }];
-  }
-};
-
-// Debug logging before module export
-console.log("🔍 DEBUG: DEMO_MODE environment variable:", process.env.DEMO_MODE);
-console.log("🔍 DEBUG: DEMO_MODE === 'true':", process.env.DEMO_MODE === 'true');
-
 module.exports = {
-  pool: process.env.DEMO_MODE === 'true' ? null : pool,
-  queryHelpers: process.env.DEMO_MODE === 'true' ? (() => {
-    console.log('🎭 DEMO_MODE detected - using mock queryHelpers');
-    return mockQueryHelpers;
-  })() : (() => {
-    console.log('🏭 PRODUCTION_MODE detected - using real queryHelpers');
-    return queryHelpers;
-  })(),
+  pool,
+  queryHelpers,
   testConnection,
   healthCheck,
   executeQuery,

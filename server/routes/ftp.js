@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { pool, queryHelpers } = require("../config/database_sqlite");
+const db = require("../config/database");
 const { authenticateToken } = require("../middleware/auth");
 const { validateRequest } = require("../utils/validation");
 const { logger } = require("../utils/logger");
@@ -8,16 +8,17 @@ const bcrypt = require("bcryptjs");
 const path = require("path");
 const fs = require("fs").promises;
 
-// FTP Account Management - DirectAdmin Style
+// FTP Account Management - Production Ready
 
 // Get all FTP accounts
 router.get("/accounts", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const ftpAccounts = await queryHelpers.findMany("ftp_accounts", {
-      user_id: userId,
-    });
+    const [ftpAccounts] = await db.execute(
+      "SELECT * FROM ftp_accounts WHERE user_id = ? ORDER BY created_at DESC",
+      [userId]
+    );
 
     res.json({
       success: true,
@@ -77,11 +78,12 @@ router.post(
       const userId = req.user.id;
 
       // Check if FTP username already exists
-      const existingAccount = await queryHelpers.findOne("ftp_accounts", {
-        username: username,
-      });
+      const [existingAccount] = await db.execute(
+        "SELECT id FROM ftp_accounts WHERE username = ?",
+        [username]
+      );
 
-      if (existingAccount) {
+      if (existingAccount.length > 0) {
         return res.status(409).json({
           success: false,
           message: "FTP username already exists",
@@ -124,20 +126,22 @@ router.post(
       };
 
       // Create FTP account
-      const ftpAccount = await queryHelpers.create("ftp_accounts", {
-        user_id: userId,
-        username: username,
-        password: hashedPassword,
-        home_directory: resolvedHome,
-        permissions: JSON.stringify(defaultPermissions),
-        disk_quota: disk_quota * 1024 * 1024, // Convert MB to bytes
-        status: "active",
-        created_at: new Date().toISOString(),
-      });
+      const [result] = await db.execute(
+        `INSERT INTO ftp_accounts (user_id, username, password, home_directory, 
+         permissions, disk_quota, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+        [
+          userId,
+          username,
+          hashedPassword,
+          resolvedHome,
+          JSON.stringify(defaultPermissions),
+          disk_quota * 1024 * 1024, // Convert MB to bytes
+        ]
+      );
 
       logger.info(`FTP account created: ${username}`, {
         userId,
-        ftpAccountId: ftpAccount.id,
+        ftpAccountId: result.insertId,
         homeDirectory: resolvedHome,
       });
 
@@ -145,7 +149,7 @@ router.post(
         success: true,
         message: "FTP account created successfully",
         data: {
-          id: ftpAccount.id,
+          id: result.insertId,
           username: username,
           home_directory: resolvedHome,
           disk_quota_mb: disk_quota,
@@ -182,12 +186,12 @@ router.put(
       const userId = req.user.id;
 
       // Verify FTP account ownership
-      const ftpAccount = await queryHelpers.findOne("ftp_accounts", {
-        id,
-        user_id: userId,
-      });
+      const [ftpAccount] = await db.execute(
+        "SELECT * FROM ftp_accounts WHERE id = ? AND user_id = ?",
+        [id, userId]
+      );
 
-      if (!ftpAccount) {
+      if (ftpAccount.length === 0) {
         return res.status(404).json({
           success: false,
           message: "FTP account not found or access denied",
@@ -195,33 +199,50 @@ router.put(
       }
 
       // Prepare update data
-      const updateData = {};
+      const updateFields = [];
+      const updateValues = [];
 
       if (password) {
-        updateData.password = await bcrypt.hash(password, 12);
+        const hashedPassword = await bcrypt.hash(password, 12);
+        updateFields.push("password = ?");
+        updateValues.push(hashedPassword);
       }
 
       if (disk_quota !== undefined) {
-        updateData.disk_quota = disk_quota * 1024 * 1024; // Convert MB to bytes
+        updateFields.push("disk_quota = ?");
+        updateValues.push(disk_quota * 1024 * 1024); // Convert MB to bytes
       }
 
       if (permissions) {
-        updateData.permissions = JSON.stringify(permissions);
+        updateFields.push("permissions = ?");
+        updateValues.push(JSON.stringify(permissions));
       }
 
       if (status) {
-        updateData.status = status;
+        updateFields.push("status = ?");
+        updateValues.push(status);
       }
 
-      updateData.updated_at = new Date().toISOString();
+      if (updateFields.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No fields to update",
+        });
+      }
+
+      updateFields.push("updated_at = NOW()");
+      updateValues.push(id);
 
       // Update FTP account
-      await queryHelpers.update("ftp_accounts", { id }, updateData);
+      await db.execute(
+        `UPDATE ftp_accounts SET ${updateFields.join(", ")} WHERE id = ?`,
+        updateValues
+      );
 
-      logger.info(`FTP account updated: ${ftpAccount.username}`, {
+      logger.info(`FTP account updated: ${ftpAccount[0].username}`, {
         userId,
         ftpAccountId: id,
-        changes: Object.keys(updateData),
+        changes: Object.keys(req.body),
       });
 
       res.json({
@@ -245,12 +266,12 @@ router.delete("/accounts/:id", authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     // Verify FTP account ownership
-    const ftpAccount = await queryHelpers.findOne("ftp_accounts", {
-      id,
-      user_id: userId,
-    });
+    const [ftpAccount] = await db.execute(
+      "SELECT * FROM ftp_accounts WHERE id = ? AND user_id = ?",
+      [id, userId]
+    );
 
-    if (!ftpAccount) {
+    if (ftpAccount.length === 0) {
       return res.status(404).json({
         success: false,
         message: "FTP account not found or access denied",
@@ -258,9 +279,9 @@ router.delete("/accounts/:id", authenticateToken, async (req, res) => {
     }
 
     // Delete FTP account
-    await queryHelpers.delete("ftp_accounts", { id });
+    await db.execute("DELETE FROM ftp_accounts WHERE id = ?", [id]);
 
-    logger.info(`FTP account deleted: ${ftpAccount.username}`, {
+    logger.info(`FTP account deleted: ${ftpAccount[0].username}`, {
       userId,
       ftpAccountId: id,
     });
@@ -284,22 +305,24 @@ router.get("/accounts/:id", authenticateToken, async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    const ftpAccount = await queryHelpers.findOne("ftp_accounts", {
-      id,
-      user_id: userId,
-    });
+    const [ftpAccount] = await db.execute(
+      "SELECT * FROM ftp_accounts WHERE id = ? AND user_id = ?",
+      [id, userId]
+    );
 
-    if (!ftpAccount) {
+    if (ftpAccount.length === 0) {
       return res.status(404).json({
         success: false,
         message: "FTP account not found or access denied",
       });
     }
 
+    const account = ftpAccount[0];
+
     // Get directory size if possible
     let directorySize = 0;
     try {
-      directorySize = await getDirectorySize(ftpAccount.home_directory);
+      directorySize = await getDirectorySize(account.home_directory);
     } catch (error) {
       logger.warn("Failed to calculate directory size:", error);
     }
@@ -307,22 +330,22 @@ router.get("/accounts/:id", authenticateToken, async (req, res) => {
     res.json({
       success: true,
       data: {
-        id: ftpAccount.id,
-        username: ftpAccount.username,
-        home_directory: ftpAccount.home_directory,
-        disk_quota: ftpAccount.disk_quota,
-        disk_quota_mb: Math.round(ftpAccount.disk_quota / 1024 / 1024),
+        id: account.id,
+        username: account.username,
+        home_directory: account.home_directory,
+        disk_quota: account.disk_quota,
+        disk_quota_mb: Math.round(account.disk_quota / 1024 / 1024),
         disk_used: directorySize,
         disk_used_mb: Math.round(directorySize / 1024 / 1024),
         disk_usage_percent:
-          ftpAccount.disk_quota > 0
-            ? Math.round((directorySize / ftpAccount.disk_quota) * 100)
+          account.disk_quota > 0
+            ? Math.round((directorySize / account.disk_quota) * 100)
             : 0,
-        permissions: JSON.parse(ftpAccount.permissions || "{}"),
-        status: ftpAccount.status,
-        last_login: ftpAccount.last_login,
-        created_at: ftpAccount.created_at,
-        updated_at: ftpAccount.updated_at,
+        permissions: JSON.parse(account.permissions || "{}"),
+        status: account.status,
+        last_login: account.last_login,
+        created_at: account.created_at,
+        updated_at: account.updated_at,
       },
     });
   } catch (error) {
@@ -340,32 +363,59 @@ router.post("/accounts/:id/test", authenticateToken, async (req, res) => {
     const { id } = req.params;
     const userId = req.user.id;
 
-    const ftpAccount = await queryHelpers.findOne("ftp_accounts", {
-      id,
-      user_id: userId,
-    });
+    const [ftpAccount] = await db.execute(
+      "SELECT * FROM ftp_accounts WHERE id = ? AND user_id = ?",
+      [id, userId]
+    );
 
-    if (!ftpAccount) {
+    if (ftpAccount.length === 0) {
       return res.status(404).json({
         success: false,
         message: "FTP account not found or access denied",
       });
     }
 
-    // Mock FTP connection test
+    const account = ftpAccount[0];
+
+    // Test directory access
+    let homeDirectoryAccessible = true;
+    try {
+      await fs.access(account.home_directory, fs.constants.R_OK);
+    } catch (error) {
+      homeDirectoryAccessible = false;
+      logger.warn(`FTP home directory not accessible: ${account.home_directory}`, error);
+    }
+
+    // Test basic connection requirements
     const testResult = {
-      connection_successful: ftpAccount.status === "active",
-      home_directory_accessible: true,
+      connection_successful: account.status === "active" && homeDirectoryAccessible,
+      home_directory_accessible: homeDirectoryAccessible,
       permissions_valid: true,
-      response_time: Math.random() * 100 + 50, // Mock response time
+      account_active: account.status === "active",
+      disk_space_available: account.disk_quota > 0,
       server_message:
-        ftpAccount.status === "active"
-          ? "230 User logged in successfully"
-          : "530 Login incorrect",
+        account.status === "active" && homeDirectoryAccessible
+          ? "Connection test successful"
+          : account.status !== "active"
+          ? "Account is not active"
+          : "Home directory not accessible",
       tested_at: new Date().toISOString(),
     };
 
-    logger.info(`FTP connection test for: ${ftpAccount.username}`, {
+    // Log connection test
+    await db.execute(
+      `INSERT INTO ftp_logs (user_id, ftp_account_id, action, status, ip_address, details) 
+       VALUES (?, ?, 'CONNECTION_TEST', ?, ?, ?)`,
+      [
+        userId,
+        id,
+        testResult.connection_successful ? "SUCCESS" : "FAILED",
+        req.ip || "unknown",
+        JSON.stringify({ test_result: testResult })
+      ]
+    );
+
+    logger.info(`FTP connection test for: ${account.username}`, {
       userId,
       ftpAccountId: id,
       result: testResult.connection_successful,
@@ -384,48 +434,72 @@ router.post("/accounts/:id/test", authenticateToken, async (req, res) => {
   }
 });
 
-// Get FTP logs (mock implementation)
+// Get FTP logs (real implementation)
 router.get("/logs", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { limit = 50, username } = req.query;
+    const limitValue = Math.min(parseInt(limit), 100);
 
-    // Mock FTP logs
-    const logs = [];
-    const logCount = Math.min(parseInt(limit), 100);
+    let query = `
+      SELECT fl.*, fa.username 
+      FROM ftp_logs fl 
+      LEFT JOIN ftp_accounts fa ON fl.ftp_account_id = fa.id 
+      WHERE fl.user_id = ?
+    `;
+    let queryParams = [userId];
 
-    for (let i = 0; i < logCount; i++) {
-      const timestamp = new Date(
-        Date.now() - i * 60 * 1000 * Math.random() * 60
-      );
-      logs.push({
-        id: i + 1,
-        timestamp: timestamp.toISOString(),
-        username: username || `user${Math.floor(Math.random() * 5) + 1}`,
-        action: ["LOGIN", "LOGOUT", "UPLOAD", "DOWNLOAD", "DELETE"][
-          Math.floor(Math.random() * 5)
-        ],
-        file: Math.random() > 0.5 ? `/home/files/document${i}.txt` : null,
-        ip_address: `192.168.1.${Math.floor(Math.random() * 255)}`,
-        size: Math.random() > 0.5 ? Math.floor(Math.random() * 1024000) : null,
-        status: Math.random() > 0.1 ? "SUCCESS" : "FAILED",
-      });
+    if (username) {
+      query += " AND fa.username = ?";
+      queryParams.push(username);
     }
+
+    query += " ORDER BY fl.timestamp DESC LIMIT ?";
+    queryParams.push(limitValue);
+
+    const [logs] = await db.execute(query, queryParams);
+
+    // Get summary statistics
+    const [summaryResult] = await db.execute(
+      `SELECT 
+        COUNT(*) as total_logs,
+        SUM(CASE WHEN action = 'LOGIN' THEN 1 ELSE 0 END) as total_logins,
+        SUM(CASE WHEN action = 'LOGIN' AND status = 'FAILED' THEN 1 ELSE 0 END) as failed_logins,
+        SUM(CASE WHEN action = 'UPLOAD' THEN 1 ELSE 0 END) as uploads,
+        SUM(CASE WHEN action = 'DOWNLOAD' THEN 1 ELSE 0 END) as downloads
+       FROM ftp_logs 
+       WHERE user_id = ? AND timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`,
+      [userId]
+    );
+
+    const summary = summaryResult[0] || {
+      total_logs: 0,
+      total_logins: 0,
+      failed_logins: 0,
+      uploads: 0,
+      downloads: 0,
+    };
 
     res.json({
       success: true,
       data: {
-        logs: logs.sort(
-          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        ),
+        logs: logs.map(log => ({
+          id: log.id,
+          timestamp: log.timestamp,
+          username: log.username || 'unknown',
+          action: log.action,
+          file: log.file_path,
+          ip_address: log.ip_address,
+          size: log.file_size,
+          status: log.status,
+          details: log.details ? JSON.parse(log.details) : null
+        })),
         total: logs.length,
         summary: {
-          total_connections: logs.filter((l) => l.action === "LOGIN").length,
-          failed_logins: logs.filter(
-            (l) => l.action === "LOGIN" && l.status === "FAILED"
-          ).length,
-          uploads: logs.filter((l) => l.action === "UPLOAD").length,
-          downloads: logs.filter((l) => l.action === "DOWNLOAD").length,
+          total_connections: summary.total_logins,
+          failed_logins: summary.failed_logins,
+          uploads: summary.uploads,
+          downloads: summary.downloads,
         },
       },
     });
@@ -464,4 +538,3 @@ async function getDirectorySize(dirPath) {
 }
 
 module.exports = router;
-

@@ -12,19 +12,21 @@ const tar = require("tar");
 const { logger } = require("../utils/logger");
 const databaseService = require("./databaseService");
 const fileService = require("./fileService");
+const db = require("../config/database");
 
 const execAsync = promisify(exec);
 
 class BackupService {
   constructor() {
     this.isLinux = process.platform === "linux";
+    this.isWindows = process.platform === "win32";
     this.isProduction = process.env.NODE_ENV === "production";
 
     // Backup configuration
     this.config = {
-      backupPath: process.env.BACKUP_PATH || "/var/backups/kpanel",
-      tempPath: process.env.TEMP_PATH || "/tmp/kpanel",
-      webRoot: process.env.WEB_ROOT || "/var/www",
+      backupPath: process.env.BACKUP_PATH || (this.isWindows ? "C:\\KPanel\\backups" : "/var/backups/kpanel"),
+      tempPath: process.env.TEMP_PATH || (this.isWindows ? "C:\\temp\\kpanel" : "/tmp/kpanel"),
+      webRoot: process.env.WEB_ROOT || (this.isWindows ? "C:\\inetpub\\wwwroot" : "/var/www"),
       retention: {
         daily: parseInt(process.env.BACKUP_RETENTION_DAILY) || 7,
         weekly: parseInt(process.env.BACKUP_RETENTION_WEEKLY) || 4,
@@ -36,13 +38,12 @@ class BackupService {
       },
     };
 
-    // System paths
+    // System paths - cross platform
     this.paths = {
-      mysqldump: "/usr/bin/mysqldump",
-      tar: "/usr/bin/tar",
-      gzip: "/usr/bin/gzip",
-      rsync: "/usr/bin/rsync",
-      rclone: "/usr/bin/rclone",
+      mysqldump: this.isWindows ? "mysqldump.exe" : "/usr/bin/mysqldump",
+      tar: this.isWindows ? "tar.exe" : "/usr/bin/tar",
+      gzip: this.isWindows ? "gzip.exe" : "/usr/bin/gzip",
+      rsync: this.isWindows ? null : "/usr/bin/rsync", // Not available on Windows
     };
 
     // Active backup jobs
@@ -55,10 +56,10 @@ class BackupService {
   async initializeBackupService() {
     try {
       // Create backup directories
-      await fs.mkdir(this.config.backupPath, { recursive: true, mode: 0o755 });
-      await fs.mkdir(this.config.tempPath, { recursive: true, mode: 0o755 });
+      await fs.mkdir(this.config.backupPath, { recursive: true });
+      await fs.mkdir(this.config.tempPath, { recursive: true });
 
-      // Load existing scheduled backups
+      // Load existing scheduled backups from database
       await this.loadScheduledBackups();
 
       logger.info("Backup service initialized successfully");
@@ -76,10 +77,6 @@ class BackupService {
     const backupName = options.name || `full-backup-${timestamp}`;
 
     try {
-      if (!this.isLinux) {
-        return this.getMockBackupResult(backupId, "full", backupName);
-      }
-
       // Initialize backup job
       const job = {
         id: backupId,
@@ -101,7 +98,7 @@ class BackupService {
         this.config.backupPath,
         `${backupName}-${backupId}`
       );
-      await fs.mkdir(backupDir, { recursive: true, mode: 0o755 });
+      await fs.mkdir(backupDir, { recursive: true });
 
       // Backup databases
       this.updateJobProgress(backupId, 10, "Backing up databases...");
@@ -133,7 +130,7 @@ class BackupService {
       );
 
       // Cleanup temporary directory
-      await fs.rmdir(backupDir, { recursive: true });
+      await fs.rm(backupDir, { recursive: true, force: true });
 
       // Get final archive size
       const stats = await fs.stat(archivePath);
@@ -145,6 +142,9 @@ class BackupService {
       job.archivePath = archivePath;
       job.finalSize = stats.size;
       job.logs.push(`Backup completed successfully. Archive: ${archivePath}`);
+
+      // Save backup record to database
+      await this.saveBackupRecord(job);
 
       logger.info(`Full backup completed: ${backupName}`, {
         backupId: backupId,
@@ -177,12 +177,17 @@ class BackupService {
   async backupAllDatabases(backupDir, userId) {
     try {
       const dbBackupDir = path.join(backupDir, "databases");
-      await fs.mkdir(dbBackupDir, { recursive: true, mode: 0o755 });
+      await fs.mkdir(dbBackupDir, { recursive: true });
 
       let totalSize = 0;
-      const dbList = await databaseService.getDatabaseList(userId);
+      
+      // Get user's databases from database
+      const [databases] = await db.execute(
+        "SELECT name FROM databases WHERE user_id = ? AND status = 'active'",
+        [userId]
+      );
 
-      for (const database of dbList.databases) {
+      for (const database of databases) {
         try {
           const backupResult = await databaseService.createDatabaseBackup(
             database.name,
@@ -207,7 +212,7 @@ class BackupService {
       return {
         success: true,
         totalSize: totalSize,
-        backupCount: dbList.databases.length,
+        backupCount: databases.length,
       };
     } catch (error) {
       logger.error("Failed to backup databases", { error: error.message });
@@ -215,32 +220,39 @@ class BackupService {
     }
   }
 
-  // Web files backup
+  // Web files backup - Cross-platform implementation
   async backupWebFiles(backupDir, userId) {
     try {
       const webBackupDir = path.join(backupDir, "webfiles");
-      await fs.mkdir(webBackupDir, { recursive: true, mode: 0o755 });
+      await fs.mkdir(webBackupDir, { recursive: true });
 
       let totalSize = 0;
 
-      if (this.isLinux) {
-        // Use rsync for efficient file copying
-        const rsyncCommand = `${this.paths.rsync} -av --exclude='*.log' --exclude='cache/' --exclude='tmp/' "${this.config.webRoot}/" "${webBackupDir}/"`;
+      // Get user's web directories from database
+      const [userDomains] = await db.execute(
+        "SELECT document_root FROM domains WHERE user_id = ? AND status = 'active'",
+        [userId]
+      );
 
-        await execAsync(rsyncCommand);
+      for (const domain of userDomains) {
+        try {
+          if (this.isLinux && this.paths.rsync) {
+            // Use rsync for efficient file copying on Linux
+            const rsyncCommand = `${this.paths.rsync} -av --exclude='*.log' --exclude='cache/' --exclude='tmp/' "${domain.document_root}/" "${webBackupDir}/"`;
+            await execAsync(rsyncCommand);
+          } else {
+            // Use Node.js native methods for cross-platform support
+            await this.copyDirectoryRecursive(domain.document_root, webBackupDir);
+          }
 
-        // Calculate total size
-        const { stdout } = await execAsync(
-          `du -sb "${webBackupDir}" | cut -f1`
-        );
-        totalSize = parseInt(stdout.trim()) || 0;
-      } else {
-        // Mock backup for development
-        await fs.writeFile(
-          path.join(webBackupDir, "mock-web-files.txt"),
-          "Mock web files backup"
-        );
-        totalSize = 1024;
+          // Calculate size
+          const dirSize = await this.calculateDirectorySize(webBackupDir);
+          totalSize += dirSize;
+        } catch (error) {
+          logger.warn(`Failed to backup web files for domain ${domain.document_root}`, {
+            error: error.message,
+          });
+        }
       }
 
       return {
@@ -254,52 +266,57 @@ class BackupService {
     }
   }
 
-  // System configurations backup
+  // System configurations backup - Cross-platform
   async backupSystemConfigs(backupDir, userId) {
     try {
       const configBackupDir = path.join(backupDir, "configs");
-      await fs.mkdir(configBackupDir, { recursive: true, mode: 0o755 });
+      await fs.mkdir(configBackupDir, { recursive: true });
 
       let totalSize = 0;
 
-      if (this.isLinux) {
-        // Backup critical configuration directories
-        const configPaths = [
-          "/etc/nginx",
-          "/etc/apache2",
-          "/etc/php",
-          "/etc/mysql",
-          "/etc/postfix",
-          "/etc/dovecot",
-          "/etc/bind",
-          "/etc/ssl/certs",
-        ];
+      // Define config paths based on platform
+      const configPaths = this.isWindows
+        ? [
+            "C:\\Windows\\System32\\inetsrv\\config",
+            "C:\\Program Files\\MySQL\\MySQL Server 8.0\\my.ini",
+            process.env.APPDATA + "\\KPanel\\config"
+          ]
+        : [
+            "/etc/nginx",
+            "/etc/apache2",
+            "/etc/php",
+            "/etc/mysql",
+            "/etc/postfix",
+            "/etc/dovecot",
+            "/etc/bind",
+            "/etc/ssl/certs",
+          ];
 
-        for (const configPath of configPaths) {
-          try {
-            await fs.access(configPath);
-            const configName = path.basename(configPath);
-            const destPath = path.join(configBackupDir, configName);
+      for (const configPath of configPaths) {
+        try {
+          await fs.access(configPath);
+          const configName = path.basename(configPath);
+          const destPath = path.join(configBackupDir, configName);
 
+          if (this.isLinux) {
             await execAsync(`cp -r "${configPath}" "${destPath}"`);
-
-            // Add to total size
-            const { stdout } = await execAsync(
-              `du -sb "${destPath}" | cut -f1`
-            );
-            totalSize += parseInt(stdout.trim()) || 0;
-          } catch (error) {
-            // Config path doesn't exist, skip
-            logger.debug(`Config path not found: ${configPath}`);
+          } else {
+            // Use Node.js for Windows
+            const stats = await fs.stat(configPath);
+            if (stats.isDirectory()) {
+              await this.copyDirectoryRecursive(configPath, destPath);
+            } else {
+              await fs.copyFile(configPath, destPath);
+            }
           }
+
+          // Add to total size
+          const size = await this.calculateDirectorySize(destPath);
+          totalSize += size;
+        } catch (error) {
+          // Config path doesn't exist, skip
+          logger.debug(`Config path not found: ${configPath}`);
         }
-      } else {
-        // Mock backup for development
-        await fs.writeFile(
-          path.join(configBackupDir, "mock-configs.txt"),
-          "Mock system configurations backup"
-        );
-        totalSize = 512;
       }
 
       return {
@@ -315,6 +332,56 @@ class BackupService {
     }
   }
 
+  // Cross-platform directory copying
+  async copyDirectoryRecursive(src, dest) {
+    try {
+      await fs.mkdir(dest, { recursive: true });
+      const items = await fs.readdir(src, { withFileTypes: true });
+
+      for (const item of items) {
+        const srcPath = path.join(src, item.name);
+        const destPath = path.join(dest, item.name);
+
+        // Skip unwanted files
+        if (item.name.endsWith('.log') || item.name === 'cache' || item.name === 'tmp') {
+          continue;
+        }
+
+        if (item.isDirectory()) {
+          await this.copyDirectoryRecursive(srcPath, destPath);
+        } else {
+          await fs.copyFile(srcPath, destPath);
+        }
+      }
+    } catch (error) {
+      logger.warn(`Failed to copy directory ${src}`, { error: error.message });
+    }
+  }
+
+  // Cross-platform directory size calculation
+  async calculateDirectorySize(dirPath) {
+    let totalSize = 0;
+
+    try {
+      const items = await fs.readdir(dirPath, { withFileTypes: true });
+
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item.name);
+
+        if (item.isDirectory()) {
+          totalSize += await this.calculateDirectorySize(fullPath);
+        } else {
+          const stats = await fs.stat(fullPath);
+          totalSize += stats.size;
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to calculate size for ${dirPath}:`, error.message);
+    }
+
+    return totalSize;
+  }
+
   // Incremental backup
   async createIncrementalBackup(userId, lastBackupPath, options = {}) {
     const backupId = this.generateBackupId();
@@ -322,10 +389,6 @@ class BackupService {
     const backupName = options.name || `incremental-backup-${timestamp}`;
 
     try {
-      if (!this.isLinux) {
-        return this.getMockBackupResult(backupId, "incremental", backupName);
-      }
-
       const job = {
         id: backupId,
         type: "incremental",
@@ -346,11 +409,11 @@ class BackupService {
         this.config.backupPath,
         `${backupName}-${backupId}`
       );
-      await fs.mkdir(backupDir, { recursive: true, mode: 0o755 });
+      await fs.mkdir(backupDir, { recursive: true });
 
       // Find files changed since last backup
       this.updateJobProgress(backupId, 20, "Finding changed files...");
-      const changedFiles = await this.findChangedFiles(lastBackupPath);
+      const changedFiles = await this.findChangedFiles(lastBackupPath, userId);
 
       // Backup only changed files
       this.updateJobProgress(backupId, 50, "Backing up changed files...");
@@ -379,7 +442,7 @@ class BackupService {
       );
 
       // Cleanup
-      await fs.rmdir(backupDir, { recursive: true });
+      await fs.rm(backupDir, { recursive: true, force: true });
 
       // Finalize job
       const stats = await fs.stat(archivePath);
@@ -388,6 +451,9 @@ class BackupService {
       job.endTime = new Date();
       job.archivePath = archivePath;
       job.finalSize = stats.size;
+
+      // Save to database
+      await this.saveBackupRecord(job);
 
       logger.info(`Incremental backup completed: ${backupName}`, {
         backupId: backupId,
@@ -415,20 +481,12 @@ class BackupService {
     }
   }
 
-  // Backup compression
+  // Backup compression - Cross-platform
   async compressBackup(backupDir, compressionType = "gzip") {
     const archiveName = `${path.basename(backupDir)}.tar.gz`;
     const archivePath = path.join(path.dirname(backupDir), archiveName);
 
-    if (this.isLinux) {
-      // Use tar with gzip compression
-      const tarCommand = `${
-        this.paths.tar
-      } -czf "${archivePath}" -C "${path.dirname(backupDir)}" "${path.basename(
-        backupDir
-      )}"`;
-      await execAsync(tarCommand);
-    } else {
+    try {
       // Use Node.js tar module for cross-platform compatibility
       await tar.create(
         {
@@ -438,20 +496,19 @@ class BackupService {
         },
         [path.basename(backupDir)]
       );
-    }
 
-    return archivePath;
+      return archivePath;
+    } catch (error) {
+      logger.error("Failed to compress backup", { error: error.message });
+      throw new Error(`Backup compression failed: ${error.message}`);
+    }
   }
 
-  // Backup restoration
+  // Backup restoration - Cross-platform
   async restoreBackup(backupPath, restoreOptions = {}) {
     const restoreId = this.generateBackupId();
 
     try {
-      if (!this.isLinux) {
-        return this.getMockRestoreResult(restoreId, backupPath);
-      }
-
       const job = {
         id: restoreId,
         type: "restore",
@@ -496,16 +553,15 @@ class BackupService {
 
       // Cleanup
       this.updateJobProgress(restoreId, 95, "Cleaning up...");
-      await fs.rmdir(extractPath, { recursive: true });
+      await fs.rm(extractPath, { recursive: true, force: true });
 
-      // Finalize
+      // Complete job
       job.status = "completed";
       job.progress = 100;
       job.endTime = new Date();
 
-      logger.info(`Backup restoration completed`, {
+      logger.info(`Backup restoration completed: ${backupPath}`, {
         restoreId: restoreId,
-        backupPath: backupPath,
         duration: job.endTime - job.startTime,
       });
 
@@ -518,174 +574,119 @@ class BackupService {
       };
     } catch (error) {
       this.updateJobStatus(restoreId, "failed", error.message);
-      logger.error(`Backup restoration failed`, {
+      logger.error(`Backup restoration failed: ${backupPath}`, {
         error: error.message,
-        backupPath: backupPath,
       });
       throw new Error(`Backup restoration failed: ${error.message}`);
     }
   }
 
-  // Scheduled backups
-  async scheduleBackup(userId, schedule, options = {}) {
+  // Save backup record to database
+  async saveBackupRecord(job) {
     try {
-      const scheduleId = this.generateScheduleId();
-      const cronExpression = this.buildCronExpression(schedule);
+      await db.execute(
+        `INSERT INTO backups (user_id, backup_id, name, type, status, 
+         file_path, file_size, created_at, completed_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          job.userId,
+          job.id,
+          job.name,
+          job.type,
+          job.status,
+          job.archivePath || null,
+          job.finalSize || 0,
+          job.startTime,
+          job.endTime || null
+        ]
+      );
+    } catch (error) {
+      logger.error("Failed to save backup record to database", {
+        error: error.message,
+      });
+    }
+  }
 
-      if (!cron.validate(cronExpression)) {
-        throw new Error(`Invalid cron expression: ${cronExpression}`);
-      }
-
-      const scheduledJob = cron.schedule(
-        cronExpression,
-        async () => {
-          try {
-            logger.info(`Running scheduled backup`, {
-              scheduleId: scheduleId,
-              userId: userId,
-            });
-
-            const backupResult = await this.createFullBackup(userId, {
-              name: `scheduled-${schedule.type}-${Date.now()}`,
-              ...options,
-            });
-
-            logger.info(`Scheduled backup completed`, {
-              scheduleId: scheduleId,
-              backupId: backupResult.backupId,
-              userId: userId,
-            });
-
-            // Cleanup old backups based on retention policy
-            await this.cleanupOldBackups(
-              schedule.type,
-              this.config.retention[schedule.type]
-            );
-          } catch (error) {
-            logger.error(`Scheduled backup failed`, {
-              scheduleId: scheduleId,
-              error: error.message,
-              userId: userId,
-            });
-          }
-        },
-        {
-          scheduled: true,
-          timezone: options.timezone || "UTC",
-        }
+  // Load scheduled backups from database
+  async loadScheduledBackups() {
+    try {
+      const [schedules] = await db.execute(
+        "SELECT * FROM backup_schedules WHERE status = 'active'"
       );
 
-      this.scheduledJobs.set(scheduleId, {
-        id: scheduleId,
-        userId: userId,
-        schedule: schedule,
-        cronExpression: cronExpression,
-        job: scheduledJob,
-        created: new Date(),
-        options: options,
-      });
-
-      logger.info(`Backup scheduled`, {
-        scheduleId: scheduleId,
-        cronExpression: cronExpression,
-        userId: userId,
-      });
-
-      return {
-        success: true,
-        scheduleId: scheduleId,
-        message: "Backup scheduled successfully",
-        cronExpression: cronExpression,
-        nextRun: this.getNextRun(cronExpression),
-      };
-    } catch (error) {
-      logger.error(`Failed to schedule backup`, {
-        error: error.message,
-        userId: userId,
-      });
-      throw new Error(`Failed to schedule backup: ${error.message}`);
-    }
-  }
-
-  async removeScheduledBackup(scheduleId) {
-    const scheduledJob = this.scheduledJobs.get(scheduleId);
-
-    if (!scheduledJob) {
-      throw new Error(`Scheduled backup ${scheduleId} not found`);
-    }
-
-    scheduledJob.job.stop();
-    scheduledJob.job.destroy();
-    this.scheduledJobs.delete(scheduleId);
-
-    logger.info(`Scheduled backup removed`, { scheduleId: scheduleId });
-
-    return {
-      success: true,
-      message: "Scheduled backup removed successfully",
-    };
-  }
-
-  // Backup cleanup
-  async cleanupOldBackups(backupType = "all", retentionDays = null) {
-    try {
-      const retention = retentionDays || this.config.retention.daily;
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - retention);
-
-      const backupFiles = await fs.readdir(this.config.backupPath);
-      let deletedCount = 0;
-      let freedSpace = 0;
-
-      for (const file of backupFiles) {
-        if (file.endsWith(".tar.gz")) {
-          const filePath = path.join(this.config.backupPath, file);
-          const stats = await fs.stat(filePath);
-
-          if (stats.mtime < cutoffDate) {
-            try {
-              freedSpace += stats.size;
-              await fs.unlink(filePath);
-              deletedCount++;
-
-              logger.info(`Deleted old backup: ${file}`, {
-                size: stats.size,
-                age: cutoffDate - stats.mtime,
-              });
-            } catch (error) {
-              logger.warn(`Failed to delete backup: ${file}`, {
-                error: error.message,
-              });
-            }
-          }
-        }
+      for (const schedule of schedules) {
+        this.scheduleBackup(
+          schedule.user_id,
+          schedule.cron_expression,
+          {
+            type: schedule.backup_type,
+            name: schedule.name,
+          },
+          schedule.id
+        );
       }
 
-      logger.info(`Backup cleanup completed`, {
-        deletedCount: deletedCount,
-        freedSpace: freedSpace,
-        retentionDays: retention,
-      });
-
-      return {
-        success: true,
-        deletedCount: deletedCount,
-        freedSpace: freedSpace,
-        freedSpaceFormatted: this.formatSize(freedSpace),
-      };
+      logger.info(`Loaded ${schedules.length} backup schedules`);
     } catch (error) {
-      logger.error(`Backup cleanup failed`, { error: error.message });
-      throw new Error(`Backup cleanup failed: ${error.message}`);
+      logger.error("Failed to load scheduled backups", {
+        error: error.message,
+      });
     }
   }
 
-  // Utility functions
-  generateBackupId() {
-    return `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Schedule backup
+  scheduleBackup(userId, cronExpression, options = {}, scheduleId = null) {
+    const job = cron.schedule(
+      cronExpression,
+      async () => {
+        try {
+          logger.info(`Executing scheduled backup for user ${userId}`);
+          
+          if (options.type === "incremental") {
+            // Get last backup for incremental
+            const [lastBackup] = await db.execute(
+              "SELECT file_path FROM backups WHERE user_id = ? AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+              [userId]
+            );
+            
+            if (lastBackup.length > 0) {
+              await this.createIncrementalBackup(userId, lastBackup[0].file_path, options);
+            } else {
+              // No previous backup, create full backup instead
+              await this.createFullBackup(userId, options);
+            }
+          } else {
+            await this.createFullBackup(userId, options);
+          }
+        } catch (error) {
+          logger.error(`Scheduled backup failed for user ${userId}`, {
+            error: error.message,
+          });
+        }
+      },
+      {
+        scheduled: false,
+      }
+    );
+
+    const jobInfo = {
+      id: scheduleId || this.generateBackupId(),
+      userId: userId,
+      schedule: job,
+      cronExpression: cronExpression,
+      options: options,
+      created: new Date(),
+    };
+
+    this.scheduledJobs.set(jobInfo.id, jobInfo);
+    job.start();
+
+    return jobInfo.id;
   }
 
-  generateScheduleId() {
-    return `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  // Utility methods
+  generateBackupId() {
+    return `backup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
   updateJobProgress(jobId, progress, message) {
@@ -693,10 +694,7 @@ class BackupService {
     if (job) {
       job.progress = progress;
       job.logs.push(`${new Date().toISOString()}: ${message}`);
-      logger.debug(`Backup progress: ${jobId}`, {
-        progress: progress,
-        message: message,
-      });
+      logger.info(`Backup ${jobId}: ${progress}% - ${message}`);
     }
   }
 
@@ -707,48 +705,21 @@ class BackupService {
       if (message) {
         job.logs.push(`${new Date().toISOString()}: ${message}`);
       }
-
       if (status === "failed" || status === "completed") {
         job.endTime = new Date();
       }
     }
   }
 
-  buildCronExpression(schedule) {
-    const { type, time, dayOfWeek, dayOfMonth } = schedule;
-
-    switch (type) {
-      case "daily":
-        const [hour, minute] = time.split(":");
-        return `${minute} ${hour} * * *`;
-
-      case "weekly":
-        const [weekHour, weekMinute] = time.split(":");
-        const day = dayOfWeek || 0; // Sunday default
-        return `${weekMinute} ${weekHour} * * ${day}`;
-
-      case "monthly":
-        const [monthHour, monthMinute] = time.split(":");
-        const monthDay = dayOfMonth || 1; // 1st of month default
-        return `${monthMinute} ${monthHour} ${monthDay} * *`;
-
-      default:
-        throw new Error(`Invalid schedule type: ${type}`);
-    }
-  }
-
   formatSize(bytes) {
-    if (bytes === 0) return "0 Bytes";
-
-    const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    if (bytes === 0) return "0 Bytes";
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
   }
 
-  formatDuration(milliseconds) {
-    const seconds = Math.floor(milliseconds / 1000);
+  formatDuration(ms) {
+    const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
 
@@ -759,36 +730,6 @@ class BackupService {
     } else {
       return `${seconds}s`;
     }
-  }
-
-  // Mock functions for development
-  getMockBackupResult(backupId, type, name) {
-    return {
-      success: true,
-      backupId: backupId,
-      message: `Mock ${type} backup ${name} completed`,
-      archivePath: `/tmp/mock-${name}.tar.gz`,
-      size: 50 * 1024 * 1024, // 50MB
-      sizeFormatted: "50.00 MB",
-      duration: "5m 30s",
-      mock: true,
-    };
-  }
-
-  getMockRestoreResult(restoreId, backupPath) {
-    return {
-      success: true,
-      restoreId: restoreId,
-      message: "Mock backup restored successfully",
-      duration: "3m 45s",
-      mock: true,
-    };
-  }
-
-  async loadScheduledBackups() {
-    // In production, this would load from database
-    // For now, just log that we're ready to accept schedules
-    logger.info("Ready to accept backup schedules");
   }
 
   async createBackupMetadata(job, backupDir) {
@@ -823,51 +764,178 @@ class BackupService {
     }
   }
 
-  // Placeholder methods for incremental backup functionality
-  async findChangedFiles(lastBackupPath) {
-    // Implementation would compare file timestamps with last backup
-    return [];
+  // Real implementations for incremental backup functionality
+  async findChangedFiles(lastBackupPath, userId) {
+    // Get last backup time from database
+    const [lastBackup] = await db.execute(
+      "SELECT created_at FROM backups WHERE file_path = ? AND user_id = ?",
+      [lastBackupPath, userId]
+    );
+
+    if (lastBackup.length === 0) {
+      return [];
+    }
+
+    const lastBackupTime = new Date(lastBackup[0].created_at);
+    const changedFiles = [];
+
+    // Get user's domains to check for changed files
+    const [domains] = await db.execute(
+      "SELECT document_root FROM domains WHERE user_id = ? AND status = 'active'",
+      [userId]
+    );
+
+    for (const domain of domains) {
+      try {
+        await this.findChangedFilesInDirectory(domain.document_root, lastBackupTime, changedFiles);
+      } catch (error) {
+        logger.warn(`Failed to check changes in ${domain.document_root}`, {
+          error: error.message,
+        });
+      }
+    }
+
+    return changedFiles;
+  }
+
+  async findChangedFilesInDirectory(dirPath, lastBackupTime, changedFiles) {
+    try {
+      const items = await fs.readdir(dirPath, { withFileTypes: true });
+
+      for (const item of items) {
+        const fullPath = path.join(dirPath, item.name);
+        
+        if (item.isDirectory()) {
+          await this.findChangedFilesInDirectory(fullPath, lastBackupTime, changedFiles);
+        } else {
+          const stats = await fs.stat(fullPath);
+          if (stats.mtime > lastBackupTime) {
+            changedFiles.push(fullPath);
+          }
+        }
+      }
+    } catch (error) {
+      logger.debug(`Failed to read directory ${dirPath}:`, error.message);
+    }
   }
 
   async backupChangedFiles(backupDir, changedFiles, userId) {
-    return { success: true, totalSize: 0 };
+    const changedBackupDir = path.join(backupDir, "changed_files");
+    await fs.mkdir(changedBackupDir, { recursive: true });
+
+    let totalSize = 0;
+
+    for (const filePath of changedFiles) {
+      try {
+        const relativePath = path.relative(this.config.webRoot, filePath);
+        const destPath = path.join(changedBackupDir, relativePath);
+        
+        // Ensure destination directory exists
+        await fs.mkdir(path.dirname(destPath), { recursive: true });
+        
+        // Copy file
+        await fs.copyFile(filePath, destPath);
+        
+        const stats = await fs.stat(destPath);
+        totalSize += stats.size;
+      } catch (error) {
+        logger.warn(`Failed to backup changed file ${filePath}`, {
+          error: error.message,
+        });
+      }
+    }
+
+    return { success: true, totalSize };
   }
 
   async backupChangedDatabases(backupDir, lastBackupPath, userId) {
-    return { success: true, totalSize: 0 };
+    // For incremental database backups, we could implement binary log parsing
+    // For now, we'll backup all databases again (they compress well if unchanged)
+    return await this.backupAllDatabases(backupDir, userId);
   }
 
   async extractBackup(backupPath, extractPath) {
-    if (this.isLinux) {
-      await execAsync(
-        `${this.paths.tar} -xzf "${backupPath}" -C "${extractPath}"`
-      );
-    } else {
-      // Mock extraction
-      await fs.mkdir(extractPath, { recursive: true });
+    await fs.mkdir(extractPath, { recursive: true });
+    
+    try {
+      // Use Node.js tar for cross-platform extraction
+      await tar.extract({
+        file: backupPath,
+        cwd: extractPath,
+      });
+    } catch (error) {
+      logger.error("Failed to extract backup", { error: error.message });
+      throw new Error(`Backup extraction failed: ${error.message}`);
     }
   }
 
   async restoreDatabases(extractPath, options) {
-    // Implementation would restore database backups
-    logger.info("Mock: Restoring databases");
+    const dbBackupDir = path.join(extractPath, "databases");
+    
+    try {
+      const backupFiles = await fs.readdir(dbBackupDir);
+      
+      for (const backupFile of backupFiles) {
+        if (backupFile.endsWith('.sql') || backupFile.endsWith('.sql.gz')) {
+          try {
+            const backupPath = path.join(dbBackupDir, backupFile);
+            const dbName = backupFile.replace(/\.(sql|sql\.gz)$/, '');
+            
+            // Use database service to restore
+            await databaseService.restoreDatabaseFromBackup(dbName, backupPath);
+            
+            logger.info(`Restored database: ${dbName}`);
+          } catch (error) {
+            logger.error(`Failed to restore database from ${backupFile}`, {
+              error: error.message,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error("Failed to restore databases", { error: error.message });
+      throw new Error(`Database restoration failed: ${error.message}`);
+    }
   }
 
   async restoreWebFiles(extractPath, options) {
-    // Implementation would restore web files
-    logger.info("Mock: Restoring web files");
+    const webBackupDir = path.join(extractPath, "webfiles");
+    
+    try {
+      // Copy files back to web root
+      await this.copyDirectoryRecursive(webBackupDir, this.config.webRoot);
+      logger.info("Web files restored successfully");
+    } catch (error) {
+      logger.error("Failed to restore web files", { error: error.message });
+      throw new Error(`Web files restoration failed: ${error.message}`);
+    }
   }
 
   async restoreConfigurations(extractPath, options) {
-    // Implementation would restore system configurations
-    logger.info("Mock: Restoring configurations");
-  }
-
-  getNextRun(cronExpression) {
-    // Calculate next run time from cron expression
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 5); // Mock: 5 minutes from now
-    return now.toISOString();
+    const configBackupDir = path.join(extractPath, "configs");
+    
+    try {
+      const configItems = await fs.readdir(configBackupDir);
+      
+      for (const item of configItems) {
+        try {
+          const srcPath = path.join(configBackupDir, item);
+          const destPath = this.isWindows
+            ? path.join("C:", "Program Files", "KPanel", "config", item)
+            : path.join("/etc", item);
+          
+          await this.copyDirectoryRecursive(srcPath, destPath);
+          logger.info(`Restored configuration: ${item}`);
+        } catch (error) {
+          logger.warn(`Failed to restore configuration ${item}`, {
+            error: error.message,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error("Failed to restore configurations", { error: error.message });
+      throw new Error(`Configuration restoration failed: ${error.message}`);
+    }
   }
 
   // Public API methods
@@ -915,6 +983,18 @@ class BackupService {
       archivePath: job.archivePath,
       finalSize: job.finalSize,
     };
+  }
+
+  getNextRun(cronExpression) {
+    try {
+      // Simple next run calculation
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 60); // Add 1 hour as default
+      return now.toISOString();
+    } catch (error) {
+      logger.warn("Failed to calculate next run time", { error: error.message });
+      return null;
+    }
   }
 }
 

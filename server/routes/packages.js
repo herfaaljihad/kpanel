@@ -693,9 +693,31 @@ async function getUserPackageUsage(userId) {
       user_id: userId,
     });
 
-    // Mock disk space and bandwidth usage (in real implementation, calculate from file system)
-    const diskSpaceUsed = Math.floor(Math.random() * 1000000000); // Random bytes
-    const bandwidthUsed = Math.floor(Math.random() * 5000000000); // Random bytes
+    // Get real disk space and bandwidth usage from database or calculate baseline
+    let diskSpaceUsed = 0;
+    let bandwidthUsed = 0;
+
+    try {
+      // Try to get from usage stats table
+      const [usageStats] = await queryHelpers.safeSelect("user_usage_stats", {
+        where: { user_id: userId },
+        orderBy: "created_at DESC",
+        limit: 1,
+      });
+
+      if (usageStats.length > 0) {
+        diskSpaceUsed = usageStats[0].disk_space_used || 0;
+        bandwidthUsed = usageStats[0].bandwidth_used || 0;
+      } else {
+        // Baseline calculation based on resources
+        diskSpaceUsed = domainsCount * 10 * 1024 * 1024; // 10MB per domain baseline
+        bandwidthUsed = domainsCount * 100 * 1024 * 1024; // 100MB per domain baseline
+      }
+    } catch (error) {
+      // Fallback to baseline if database error
+      diskSpaceUsed = domainsCount * 10 * 1024 * 1024;
+      bandwidthUsed = domainsCount * 100 * 1024 * 1024;
+    }
 
     return {
       disk_space_used: diskSpaceUsed,
@@ -865,4 +887,3 @@ function formatBytes(bytes) {
 }
 
 module.exports = router;
-

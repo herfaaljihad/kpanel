@@ -1,5 +1,5 @@
 const express = require("express");
-const { testConnection, healthCheck } = require("../config/database_sqlite");
+const { testConnection, healthCheck } = require("../config/database");
 const router = express.Router();
 
 // Basic health check
@@ -157,4 +157,3 @@ router.get("/live", (req, res) => {
 });
 
 module.exports = router;
-

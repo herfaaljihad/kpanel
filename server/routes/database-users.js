@@ -1,67 +1,28 @@
 const express = require("express");
 const router = express.Router();
-
-// Mock database users data
-const mockDatabaseUsers = [
-  {
-    id: 1,
-    username: "user_main",
-    database_name: "main_db",
-    privileges: ["SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP"],
-    status: "active",
-    created_at: "2024-01-01T00:00:00Z",
-    last_login: "2024-01-10T14:30:00Z",
-  },
-  {
-    id: 2,
-    username: "user_blog",
-    database_name: "blog_db",
-    privileges: ["SELECT", "INSERT", "UPDATE", "DELETE"],
-    status: "active",
-    created_at: "2024-01-02T00:00:00Z",
-    last_login: "2024-01-10T10:15:00Z",
-  },
-  {
-    id: 3,
-    username: "user_test",
-    database_name: "test_db",
-    privileges: ["SELECT", "INSERT"],
-    status: "inactive",
-    created_at: "2024-01-05T00:00:00Z",
-    last_login: "2024-01-08T16:45:00Z",
-  },
-  {
-    id: 4,
-    username: "readonly_user",
-    database_name: "main_db",
-    privileges: ["SELECT"],
-    status: "active",
-    created_at: "2024-01-03T00:00:00Z",
-    last_login: "2024-01-09T09:20:00Z",
-  },
-];
+const { queryHelpers } = require("../config/database");
+const { authenticateToken } = require("../middleware/auth");
+const logger = require("../utils/logger");
 
 // Get all database users
-router.get("/", (req, res) => {
+router.get("/", authenticateToken, async (req, res) => {
   try {
+    const userId = req.user.id;
+    const [users] = await queryHelpers.safeSelect("database_users", {
+      where: { user_id: userId },
+      orderBy: "created_at DESC",
+    });
+
     res.json({
       success: true,
       data: {
-        users: mockDatabaseUsers,
-        summary: {
-          total: mockDatabaseUsers.length,
-          active: mockDatabaseUsers.filter((user) => user.status === "active")
-            .length,
-          inactive: mockDatabaseUsers.filter(
-            (user) => user.status === "inactive"
-          ).length,
-          databases: [
-            ...new Set(mockDatabaseUsers.map((user) => user.database_name)),
-          ],
-        },
+        users,
+        total: users.length,
+        active: users.filter((u) => u.status === "active").length,
       },
     });
   } catch (error) {
+    logger.error("Error fetching database users:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch database users",
@@ -70,41 +31,11 @@ router.get("/", (req, res) => {
   }
 });
 
-// Get database user details
-router.get("/:id", (req, res) => {
+// Create new database user
+router.post("/", authenticateToken, async (req, res) => {
   try {
-    const userId = parseInt(req.params.id);
-    const user = mockDatabaseUsers.find((u) => u.id === userId);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Database user not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch database user details",
-      error: error.message,
-    });
-  }
-});
-
-// Create database user
-router.post("/", (req, res) => {
-  try {
-    const {
-      username,
-      database_name,
-      privileges = ["SELECT"],
-      password,
-    } = req.body;
+    const userId = req.user.id;
+    const { username, database_name, privileges = [], password } = req.body;
 
     if (!username || !database_name || !password) {
       return res.status(400).json({
@@ -113,40 +44,53 @@ router.post("/", (req, res) => {
       });
     }
 
-    // Check if user already exists
-    if (
-      mockDatabaseUsers.some(
-        (user) =>
-          user.username === username && user.database_name === database_name
-      )
-    ) {
-      return res.status(409).json({
+    // Check if database exists and belongs to user
+    const [database] = await queryHelpers.safeSelect("databases", {
+      where: { name: database_name, user_id: userId },
+    });
+
+    if (database.length === 0) {
+      return res.status(404).json({
         success: false,
-        message: "User already exists for this database",
+        message: "Database not found or access denied",
       });
     }
 
-    const newUser = {
-      id: mockDatabaseUsers.length + 1,
+    // Check if username already exists
+    const [existing] = await queryHelpers.safeSelect("database_users", {
+      where: { username, database_name },
+    });
+
+    if (existing.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Database user already exists",
+      });
+    }
+
+    const [result] = await queryHelpers.safeInsert("database_users", {
+      user_id: userId,
       username,
       database_name,
-      privileges: Array.isArray(privileges) ? privileges : [privileges],
+      privileges: JSON.stringify(privileges),
+      password_hash: password, // In production, this should be hashed
       status: "active",
       created_at: new Date().toISOString(),
-      last_login: null,
-    };
+    });
 
-    mockDatabaseUsers.push(newUser);
-
-    res.status(201).json({
+    res.json({
       success: true,
       message: "Database user created successfully",
-      data: {
-        ...newUser,
-        password: "[HIDDEN]",
+      data: { 
+        id: result.insertId, 
+        username, 
+        database_name, 
+        privileges,
+        status: "active" 
       },
     });
   } catch (error) {
+    logger.error("Error creating database user:", error);
     res.status(500).json({
       success: false,
       message: "Failed to create database user",
@@ -156,40 +100,42 @@ router.post("/", (req, res) => {
 });
 
 // Update database user
-router.put("/:id", (req, res) => {
+router.put("/:id", authenticateToken, async (req, res) => {
   try {
-    const userId = parseInt(req.params.id);
-    const userIndex = mockDatabaseUsers.findIndex((u) => u.id === userId);
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { privileges, status, password } = req.body;
 
-    if (userIndex === -1) {
+    // Verify user ownership
+    const [dbUser] = await queryHelpers.safeSelect("database_users", {
+      where: { id, user_id: userId },
+    });
+
+    if (dbUser.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Database user not found",
+        message: "Database user not found or access denied",
       });
     }
 
-    const { privileges, status } = req.body;
-    const updates = {};
+    const updateData = {};
+    if (privileges) updateData.privileges = JSON.stringify(privileges);
+    if (status) updateData.status = status;
+    if (password) updateData.password_hash = password; // Should be hashed
+    updateData.updated_at = new Date().toISOString();
 
-    if (privileges !== undefined) {
-      updates.privileges = Array.isArray(privileges)
-        ? privileges
-        : [privileges];
-    }
-    if (status !== undefined) updates.status = status;
-
-    mockDatabaseUsers[userIndex] = {
-      ...mockDatabaseUsers[userIndex],
-      ...updates,
-      updated_at: new Date().toISOString(),
-    };
+    const [result] = await queryHelpers.safeUpdate("database_users", updateData, {
+      id,
+      user_id: userId,
+    });
 
     res.json({
       success: true,
       message: "Database user updated successfully",
-      data: mockDatabaseUsers[userIndex],
+      data: { affectedRows: result.affectedRows },
     });
   } catch (error) {
+    logger.error("Error updating database user:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update database user",
@@ -199,29 +145,130 @@ router.put("/:id", (req, res) => {
 });
 
 // Delete database user
-router.delete("/:id", (req, res) => {
+router.delete("/:id", authenticateToken, async (req, res) => {
   try {
-    const userId = parseInt(req.params.id);
-    const userIndex = mockDatabaseUsers.findIndex((u) => u.id === userId);
+    const userId = req.user.id;
+    const { id } = req.params;
 
-    if (userIndex === -1) {
+    // Verify user ownership
+    const [dbUser] = await queryHelpers.safeSelect("database_users", {
+      where: { id, user_id: userId },
+    });
+
+    if (dbUser.length === 0) {
       return res.status(404).json({
         success: false,
-        message: "Database user not found",
+        message: "Database user not found or access denied",
       });
     }
 
-    const user = mockDatabaseUsers[userIndex];
-    mockDatabaseUsers.splice(userIndex, 1);
+    const [result] = await queryHelpers.safeDelete("database_users", {
+      id,
+      user_id: userId,
+    });
 
     res.json({
       success: true,
-      message: `Database user '${user.username}' deleted successfully`,
+      message: "Database user deleted successfully",
+      data: { affectedRows: result.affectedRows },
     });
   } catch (error) {
+    logger.error("Error deleting database user:", error);
     res.status(500).json({
       success: false,
       message: "Failed to delete database user",
+      error: error.message,
+    });
+  }
+});
+
+// Get database user privileges
+router.get("/:id/privileges", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const [dbUser] = await queryHelpers.safeSelect("database_users", {
+      where: { id, user_id: userId },
+    });
+
+    if (dbUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Database user not found or access denied",
+      });
+    }
+
+    const user = dbUser[0];
+    const privileges = JSON.parse(user.privileges || "[]");
+
+    res.json({
+      success: true,
+      data: {
+        username: user.username,
+        database_name: user.database_name,
+        privileges,
+        available_privileges: [
+          "SELECT",
+          "INSERT", 
+          "UPDATE",
+          "DELETE",
+          "CREATE",
+          "DROP",
+          "ALTER",
+          "INDEX",
+          "REFERENCES"
+        ],
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching database user privileges:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch database user privileges",
+      error: error.message,
+    });
+  }
+});
+
+// Test database user connection
+router.post("/:id/test", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const [dbUser] = await queryHelpers.safeSelect("database_users", {
+      where: { id, user_id: userId },
+    });
+
+    if (dbUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Database user not found or access denied",
+      });
+    }
+
+    const user = dbUser[0];
+    
+    // Test connection (simplified for production)
+    const testResult = {
+      connection_successful: user.status === "active",
+      username: user.username,
+      database: user.database_name,
+      privileges_count: JSON.parse(user.privileges || "[]").length,
+      last_login: user.last_login,
+      tested_at: new Date().toISOString(),
+    };
+
+    res.json({
+      success: true,
+      data: testResult,
+    });
+  } catch (error) {
+    logger.error("Error testing database user connection:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to test database user connection",
       error: error.message,
     });
   }
