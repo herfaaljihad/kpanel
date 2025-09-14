@@ -9,9 +9,9 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: './index.html'
-      }
-    }
+        main: "./index.html",
+      },
+    },
   },
   server: {
     port: 3000,

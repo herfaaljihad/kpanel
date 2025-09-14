@@ -7,4 +7,4 @@ echo "🚀 Starting KPanel Production Server..."
 export NODE_ENV=production
 
 # Start production server
-node production-server.js
+node server.js
