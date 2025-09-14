@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # KPanel Installation Script for CentOS/RHEL/Rocky Linux/AlmaLinux
-# Usage: curl -fsSL https://raw.githubusercontent.com/kreasianakgemilang/kpanel/main/install-centos.sh | sudo bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-centos.sh | sudo bash
 
 set -e
 
@@ -32,7 +32,7 @@ useradd -r -m -s /bin/bash kpanel || true
 echo "[5/8] Downloading KPanel..."
 mkdir -p /opt/kpanel
 cd /opt/kpanel
-git clone https://github.com/kreasianakgemilang/kpanel.git .
+git clone https://github.com/herfaaljihad/kpanel.git .
 chown -R kpanel:kpanel /opt/kpanel
 
 echo "[6/8] Installing KPanel..."

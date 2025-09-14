@@ -40,7 +40,7 @@ KPanel is a lightweight, modern web-based control panel for server management. I
 #### Ubuntu/Debian
 
 ```bash
-wget https://raw.githubusercontent.com/kreasianakgemilang/kpanel/main/install.sh -O kpanel-install.sh
+wget https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-ubuntu.sh -O kpanel-install.sh
 chmod +x kpanel-install.sh
 sudo ./kpanel-install.sh
 ```
@@ -48,7 +48,7 @@ sudo ./kpanel-install.sh
 #### CentOS/RHEL/Rocky Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kreasianakgemilang/kpanel/main/install-centos.sh -o kpanel-install.sh
+curl -fsSL https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-centos.sh -o kpanel-install.sh
 chmod +x kpanel-install.sh
 sudo ./kpanel-install.sh
 ```
@@ -57,7 +57,7 @@ sudo ./kpanel-install.sh
 
 ```powershell
 # Run as Administrator
-irm https://raw.githubusercontent.com/kreasianakgemilang/kpanel/main/install-windows.ps1 | iex
+irm https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-windows.ps1 | iex
 ```
 
 ### Manual Installation
@@ -65,7 +65,7 @@ irm https://raw.githubusercontent.com/kreasianakgemilang/kpanel/main/install-win
 #### 1. Clone Repository
 
 ```bash
-git clone https://github.com/kreasianakgemilang/kpanel.git
+git clone https://github.com/herfaaljihad/kpanel.git
 cd kpanel
 ```
 
@@ -334,7 +334,7 @@ We welcome contributions! Here's how to get started:
 ### Development Setup
 
 ```bash
-git clone https://github.com/kreasianakgemilang/kpanel.git
+git clone https://github.com/herfaaljihad/kpanel.git
 cd kpanel
 npm install
 cp .env.example .env
@@ -351,10 +351,10 @@ npm run dev
 
 ## 📞 Support & Community
 
-- **📚 Documentation**: [GitHub Wiki](https://github.com/kreasianakgemilang/kpanel/wiki)
-- **🐛 Bug Reports**: [GitHub Issues](https://github.com/kreasianakgemilang/kpanel/issues)
-- **💬 Discussions**: [GitHub Discussions](https://github.com/kreasianakgemilang/kpanel/discussions)
-- **🚀 Feature Requests**: [GitHub Issues](https://github.com/kreasianakgemilang/kpanel/issues/new?template=feature_request.md)
+- **📚 Documentation**: [GitHub Wiki](https://github.com/herfaaljihad/kpanel/wiki)
+- **🐛 Bug Reports**: [GitHub Issues](https://github.com/herfaaljihad/kpanel/issues)
+- **💬 Discussions**: [GitHub Discussions](https://github.com/herfaaljihad/kpanel/discussions)
+- **🚀 Feature Requests**: [GitHub Issues](https://github.com/herfaaljihad/kpanel/issues/new?template=feature_request.md)
 
 ## � System Requirements
 
@@ -396,11 +396,11 @@ copies or substantial portions of the Software.
 
 <p align="center">
   <strong>🚀 KPanel - Simple, Powerful, Secure Server Management</strong><br>
-  <em>Built with ❤️ by <a href="https://github.com/kreasianakgemilang">Kreasiana Kgemilang</a></em>
+  <em>Built with ❤️ by <a href="https://github.com/herfaaljihad">Herf Al Jihad</a></em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/stars/kreasianakgemilang/kpanel?style=social" alt="GitHub stars">
-  <img src="https://img.shields.io/github/forks/kreasianakgemilang/kpanel?style=social" alt="GitHub forks">
-  <img src="https://img.shields.io/github/issues/kreasianakgemilang/kpanel" alt="GitHub issues">
+  <img src="https://img.shields.io/github/stars/herfaaljihad/kpanel?style=social" alt="GitHub stars">
+  <img src="https://img.shields.io/github/forks/herfaaljihad/kpanel?style=social" alt="GitHub forks">
+  <img src="https://img.shields.io/github/issues/herfaaljihad/kpanel" alt="GitHub issues">
 </p>

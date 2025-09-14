@@ -1,6 +1,6 @@
 # KPanel Installation Script for Windows PowerShell
 # Similar to HestiaCP installation approach
-# Usage: irm https://raw.githubusercontent.com/kreasianakgemilang/kpanel/main/install-windows.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/herfaaljihad/kpanel/main/install-windows.ps1 | iex
 
 param(
     [string]$InstallPath = "C:\kpanel",
@@ -151,7 +151,7 @@ function Download-KPanel {
     
     # Clone repository
     Set-Location $InstallPath
-    git clone https://github.com/kreasianakgemilang/kpanel.git .
+    git clone https://github.com/herfaaljihad/kpanel.git .
     
     if (-not (Test-Path "$InstallPath\package.json")) {
         Write-Error "Failed to download KPanel. Please check your internet connection and try again."
