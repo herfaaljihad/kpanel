@@ -1,15 +1,15 @@
-const express = require('express');
-const path = require('path');
-const cors = require('cors');
+const express = require("express");
+const path = require("path");
+const cors = require("cors");
 
 const app = express();
 const PORT = process.env.PORT || 2222;
 
 // Get public IP from environment or detect
-let PUBLIC_IP = process.env.PUBLIC_IP || '147.139.202.42';
+let PUBLIC_IP = process.env.PUBLIC_IP || "147.139.202.42";
 
 console.log(`🐳 KPanel Docker HTTP Server - 404 Fix Edition`);
-console.log(`📊 Environment: ${process.env.NODE_ENV || 'production'} (Docker)`);
+console.log(`📊 Environment: ${process.env.NODE_ENV || "production"} (Docker)`);
 console.log(`🔌 Port: ${PORT}`);
 console.log(`🌐 Public IP: ${PUBLIC_IP}`);
 console.log(`🔓 Protocol: HTTP ONLY`);
@@ -20,108 +20,111 @@ const corsOptions = {
     // Allow all origins for HTTP-only server
     callback(null, true);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  credentials: true
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Security headers for HTTP
 app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
   // HTTP-specific headers
-  res.setHeader('Content-Security-Policy', 
+  res.setHeader(
+    "Content-Security-Policy",
     "default-src 'self' 'unsafe-inline' 'unsafe-eval' http: ws:; " +
-    "img-src 'self' data: http:; " +
-    "font-src 'self' data: http:; " +
-    "style-src 'self' 'unsafe-inline' http:; " +
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' http:;"
+      "img-src 'self' data: http:; " +
+      "font-src 'self' data: http:; " +
+      "style-src 'self' 'unsafe-inline' http:; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' http:;"
   );
-  
+
   next();
 });
 
 // Log all requests
 app.use((req, res, next) => {
-  console.log(`🔍 ${new Date().toISOString()} ${req.method} ${req.path} - ${req.ip}`);
+  console.log(
+    `🔍 ${new Date().toISOString()} ${req.method} ${req.path} - ${req.ip}`
+  );
   next();
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
-    service: 'KPanel Docker HTTP Server',
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    service: "KPanel Docker HTTP Server",
     timestamp: new Date().toISOString(),
     memory: process.memoryUsage(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   });
 });
 
 // Server info endpoint
-app.get('/api/server/info', (req, res) => {
+app.get("/api/server/info", (req, res) => {
   res.json({
-    server: 'KPanel Docker',
-    version: '2.0.0',
-    protocol: 'HTTP',
+    server: "KPanel Docker",
+    version: "2.0.0",
+    protocol: "HTTP",
     port: PORT,
     public_ip: PUBLIC_IP,
     node_version: process.version,
     platform: process.platform,
-    arch: process.arch
+    arch: process.arch,
   });
 });
 
 // Basic auth endpoint for compatibility
-app.post('/api/auth/login', (req, res) => {
+app.post("/api/auth/login", (req, res) => {
   const { email, password } = req.body;
-  
+
   // Simple auth for demo
-  if (email === 'admin@kpanel.local' && password === 'IPdV7HGf00E') {
+  if (email === "admin@kpanel.local" && password === "IPdV7HGf00E") {
     res.json({
       success: true,
-      token: 'demo-token-' + Date.now(),
-      user: { email: 'admin@kpanel.local', role: 'admin' }
+      token: "demo-token-" + Date.now(),
+      user: { email: "admin@kpanel.local", role: "admin" },
     });
   } else {
     res.status(401).json({
       success: false,
-      message: 'Invalid credentials'
+      message: "Invalid credentials",
     });
   }
 });
 
 // System stats endpoint
-app.get('/api/system/stats', (req, res) => {
+app.get("/api/system/stats", (req, res) => {
   res.json({
     cpu: { usage: Math.random() * 100 },
     memory: process.memoryUsage(),
     uptime: process.uptime(),
-    loadavg: require('os').loadavg(),
+    loadavg: require("os").loadavg(),
     platform: process.platform,
-    arch: process.arch
+    arch: process.arch,
   });
 });
 
 // Static file serving with fallback
 const staticPaths = [
-  path.join(__dirname, 'client-dist'),
-  path.join(__dirname, 'client', 'dist'),
-  path.join(__dirname, 'public')
+  path.join(__dirname, "client-dist"),
+  path.join(__dirname, "client", "dist"),
+  path.join(__dirname, "public"),
 ];
 
 // Try to serve static files from multiple locations
 let staticPath = null;
 for (const tryPath of staticPaths) {
   try {
-    if (require('fs').existsSync(tryPath)) {
+    if (require("fs").existsSync(tryPath)) {
       staticPath = tryPath;
       break;
     }
@@ -175,8 +178,12 @@ const fallbackHTML = `
             <p><strong>Port:</strong> ${PORT}</p>
             <p><strong>Public IP:</strong> ${PUBLIC_IP}</p>
             <p><strong>Node.js:</strong> ${process.version}</p>
-            <p><strong>Platform:</strong> ${process.platform} ${process.arch}</p>
-            <p><strong>Uptime:</strong> <span id="uptime">${Math.floor(process.uptime())}s</span></p>
+            <p><strong>Platform:</strong> ${process.platform} ${
+  process.arch
+}</p>
+            <p><strong>Uptime:</strong> <span id="uptime">${Math.floor(
+              process.uptime()
+            )}s</span></p>
         </div>
 
         <div class="login-form">
@@ -244,41 +251,46 @@ const fallbackHTML = `
 </html>`;
 
 // Catch-all route for SPA
-app.get('*', (req, res) => {
+app.get("*", (req, res) => {
   // Try to serve index.html from static directory
   if (staticPath) {
-    const indexPath = path.join(staticPath, 'index.html');
+    const indexPath = path.join(staticPath, "index.html");
     try {
-      if (require('fs').existsSync(indexPath)) {
+      if (require("fs").existsSync(indexPath)) {
         return res.sendFile(indexPath);
       }
     } catch (e) {
       // Fall through to fallback
     }
   }
-  
+
   // Serve fallback HTML
   res.send(fallbackHTML);
 });
 
 // Error handling
 app.use((error, req, res, next) => {
-  console.error('❌ Server Error:', error);
+  console.error("❌ Server Error:", error);
   res.status(500).json({
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
+    error: "Internal Server Error",
+    message:
+      process.env.NODE_ENV === "development"
+        ? error.message
+        : "Something went wrong",
   });
 });
 
 // Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`\n🎉 KPanel Docker HTTP Server Started!`);
   console.log(`\n📊 Server Information:`);
   console.log(`   🌐 Public URL: http://${PUBLIC_IP}:${PORT}`);
   console.log(`   🏠 Local URL: http://localhost:${PORT}`);
   console.log(`   📡 API Base: http://${PUBLIC_IP}:${PORT}/api`);
   console.log(`   🗄️ Database: SQLite (Available)`);
-  console.log(`   ⚙️ Environment: ${process.env.NODE_ENV || 'production'} (Docker)`);
+  console.log(
+    `   ⚙️ Environment: ${process.env.NODE_ENV || "production"} (Docker)`
+  );
   console.log(`\n🔗 Quick Links:`);
   console.log(`   💚 Health Check: http://${PUBLIC_IP}:${PORT}/api/health`);
   console.log(`   📊 Server Info: http://${PUBLIC_IP}:${PORT}/api/server/info`);
@@ -287,18 +299,18 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('🔄 Received SIGTERM, shutting down gracefully');
+process.on("SIGTERM", () => {
+  console.log("🔄 Received SIGTERM, shutting down gracefully");
   server.close(() => {
-    console.log('✅ Server closed');
+    console.log("✅ Server closed");
     process.exit(0);
   });
 });
 
-process.on('SIGINT', () => {
-  console.log('🔄 Received SIGINT, shutting down gracefully');
+process.on("SIGINT", () => {
+  console.log("🔄 Received SIGINT, shutting down gracefully");
   server.close(() => {
-    console.log('✅ Server closed');
+    console.log("✅ Server closed");
     process.exit(0);
   });
 });

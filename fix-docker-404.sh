@@ -7,7 +7,7 @@ echo "🔧 KPanel Docker 404 Fix"
 echo "========================="
 
 # Change to KPanel directory
-cd /opt/kpanel
+cd /opt/kpanel || exit
 
 echo "📱 Step 1: Stopping current container..."
 docker-compose down
