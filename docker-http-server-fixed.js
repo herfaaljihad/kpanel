@@ -3,7 +3,7 @@ const path = require("path");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 2222;
+const PORT = process.env.PORT || 3000;
 
 // Get public IP from environment or detect
 let PUBLIC_IP = process.env.PUBLIC_IP || "147.139.202.42";

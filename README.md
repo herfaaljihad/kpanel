@@ -44,12 +44,14 @@ chmod +x install-production.sh
 ## System Requirements
 
 ### Minimum Requirements
+
 - RAM: 256MB (512MB recommended)
 - Storage: 1GB free space
 - OS: Ubuntu 18.04+, CentOS 7+, or any Docker-compatible system
 - Network: Internet connection for installation
 
 ### Supported Systems
+
 - Ubuntu 18.04, 20.04, 22.04
 - CentOS 7, 8
 - Debian 9, 10, 11
@@ -69,6 +71,7 @@ After installation, access KPanel at:
 ## Configuration
 
 ### Environment Variables
+
 Copy `.env.example` to `.env` and configure:
 
 ```bash
@@ -91,6 +94,7 @@ FILEBROWSER_DATABASE=/data/filebrowser.db
 ## Development
 
 ### Prerequisites
+
 - Node.js 18+
 - npm 8+
 
@@ -133,18 +137,21 @@ docker-compose pull && docker-compose up -d
 ### Common Issues
 
 **Installation fails with memory error:**
+
 ```bash
 # Use ultra-low memory installer
 curl -sSL https://raw.githubusercontent.com/yourusername/kpanel/main/docker-install-ultra-low-memory.sh | bash
 ```
 
 **Docker container returns 404:**
+
 ```bash
 # Run the Docker fix script
 curl -sSL https://raw.githubusercontent.com/yourusername/kpanel/main/fix-docker-404.sh | bash
 ```
 
 **Cannot access web interface:**
+
 1. Check if service is running: `docker ps`
 2. Check logs: `docker logs kpanel`
 3. Verify port is open: `netstat -tulpn | grep 3000`
